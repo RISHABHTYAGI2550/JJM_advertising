@@ -1,6 +1,3 @@
-import 'dart:io';
-import 'package:flutter/foundation.dart';
-
 class AppConfig {
   static const String appVersion = "1.0.0";
   static const String defaultFallbackQueue = "https://hms.jjmhospitalkashipur.com/qd";

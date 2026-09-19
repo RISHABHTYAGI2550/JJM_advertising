@@ -1,9 +1,311 @@
 {
-  "departments": [],
-  "screens": [],
-  "pairingSessions": [],
-  "media": [],
-  "playlists": [],
-  "campaigns": [],
-  "auditLogs": []
+  "departments": [
+    {
+      "name": "Nepro",
+      "code": "Opd-1",
+      "floor": "1st Floor",
+      "description": "Dr. Abhishek Goal DOC0038",
+      "defaultQueueUrl": "https://hms.jjmhospitalkashipur.com/qd/DOC038",
+      "status": "active",
+      "id": "DEP-OPD-1",
+      "createdAt": "2026-09-18T19:05:37.686Z",
+      "screenCount": 0
+    }
+  ],
+  "screens": [
+    {
+      "id": "SCR-SCR-541",
+      "name": "rr",
+      "code": "SCR-541",
+      "departmentId": "GENERAL",
+      "location": "1",
+      "queueUrl": "https://hms.jjmhospitalkashipur.com/qd/DOC038",
+      "status": "active",
+      "connectionStatus": "offline",
+      "lastHeartbeat": "2026-09-19T05:39:24.457Z",
+      "currentContent": "queue",
+      "currentCampaignId": null,
+      "playlistId": "PL-DEFAULT",
+      "deviceToken": "DEV-6d9cdfbf-17d3-44d8-9eb6-367ffca7b9a9",
+      "playerVersion": "1.0.0",
+      "createdAt": "2026-09-18T19:01:22.320Z"
+    }
+  ],
+  "pairingSessions": [
+    {
+      "pairingCode": "128915",
+      "expiresAt": 1789798004963,
+      "status": "paired",
+      "deviceMetadata": {
+        "platform": "Android TV 12",
+        "model": "Hospital Smart TV"
+      },
+      "screenId": "SCR-DOC038-TV",
+      "deviceToken": "DEV-e2ca46d2-673a-432d-8c69-054a50d4ea3f"
+    }
+  ],
+  "media": [
+    {
+      "title": "AG1",
+      "type": "image",
+      "url": "https://ik.imagekit.io/ohiabhist/hw.png",
+      "duration": 5,
+      "size": 0,
+      "dimensions": "1920x1080",
+      "tags": [
+        ""
+      ],
+      "category": "Emergency",
+      "id": "MED-MU7D05D6",
+      "createdAt": "2026-09-18T19:36:25.386Z"
+    },
+    {
+      "title": "My",
+      "type": "image",
+      "url": "https://ik.imagekit.io/ohiabhist/rajkumar.png?updatedAt=1752325047621",
+      "duration": 5,
+      "size": 0,
+      "dimensions": "1920x1080",
+      "tags": [
+        ""
+      ],
+      "category": "Promotion",
+      "id": "MED-MU7D4LCB",
+      "createdAt": "2026-09-18T19:39:52.715Z"
+    }
+  ],
+  "playlists": [
+    {
+      "name": "Test",
+      "description": "",
+      "items": [
+        {
+          "id": "1789760436365",
+          "type": "queue",
+          "title": "Doctor Live Token Queue",
+          "duration": 5,
+          "order": 1
+        },
+        {
+          "id": "1789760437379",
+          "type": "image",
+          "title": "AG1",
+          "duration": 5,
+          "mediaId": "MED-MU7D05D6",
+          "mediaUrl": "https://ik.imagekit.io/ohiabhist/hw.png",
+          "order": 2
+        },
+        {
+          "id": "1789760438310",
+          "type": "queue",
+          "title": "Doctor Live Token Queue",
+          "duration": 5,
+          "order": 3
+        },
+        {
+          "id": "1789760439219",
+          "type": "image",
+          "title": "My",
+          "duration": 5,
+          "mediaId": "MED-MU7D4LCB",
+          "mediaUrl": "https://ik.imagekit.io/ohiabhist/rajkumar.png?updatedAt=1752325047621",
+          "order": 4
+        }
+      ],
+      "isDefault": false,
+      "id": "PL-MU7D6BC9",
+      "createdAt": "2026-09-18T19:41:13.065Z"
+    }
+  ],
+  "campaigns": [
+    {
+      "name": "Hand-Wash Information",
+      "description": "",
+      "type": "screen",
+      "contentType": "playlist",
+      "targetIds": [
+        "SCR-SCR-541"
+      ],
+      "mediaId": "MED-MU7D05D6",
+      "mediaUrl": "https://ik.imagekit.io/ohiabhist/hw.png",
+      "playlistId": "PL-MU7D6BC9",
+      "priority": 80,
+      "daysOfWeek": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "status": "active",
+      "id": "CAMP-MU7CRQQW",
+      "createdAt": "2026-09-18T19:29:53.192Z"
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "AUD-MU7YJ1LU",
+      "action": "UPDATE_SCREEN",
+      "entity": "Screen",
+      "entityId": "SCR-SCR-541",
+      "details": "Updated screen parameters: {\"currentContent\":\"queue\"}",
+      "timestamp": "2026-09-19T05:38:58.914Z"
+    },
+    {
+      "id": "AUD-MU7D6KU1",
+      "action": "UPDATE_CAMPAIGN",
+      "entity": "Campaign",
+      "entityId": "CAMP-MU7CRQQW",
+      "details": "Updated campaign status to: active",
+      "timestamp": "2026-09-18T19:41:25.369Z"
+    },
+    {
+      "id": "AUD-MU7D6BC9",
+      "action": "CREATE_PLAYLIST",
+      "entity": "Playlist",
+      "entityId": "PL-MU7D6BC9",
+      "details": "Created playlist: Test",
+      "timestamp": "2026-09-18T19:41:13.065Z"
+    },
+    {
+      "id": "AUD-MU7D4LCB",
+      "action": "UPLOAD_MEDIA",
+      "entity": "Media",
+      "entityId": "MED-MU7D4LCB",
+      "details": "Uploaded media: My",
+      "timestamp": "2026-09-18T19:39:52.715Z"
+    },
+    {
+      "id": "AUD-MU7D2OUM",
+      "action": "DELETE_MEDIA",
+      "entity": "Media",
+      "entityId": "MED-MU7CQ2TG",
+      "details": "Deleted media: MED-MU7CQ2TG",
+      "timestamp": "2026-09-18T19:38:23.950Z"
+    },
+    {
+      "id": "AUD-MU7D1MJV",
+      "action": "UPDATE_CAMPAIGN",
+      "entity": "Campaign",
+      "entityId": "CAMP-MU7CRQQW",
+      "details": "Updated campaign status to: active",
+      "timestamp": "2026-09-18T19:37:34.315Z"
+    },
+    {
+      "id": "AUD-MU7D0H64",
+      "action": "UPDATE_CAMPAIGN",
+      "entity": "Campaign",
+      "entityId": "CAMP-MU7CRQQW",
+      "details": "Updated campaign status to: active",
+      "timestamp": "2026-09-18T19:36:40.684Z"
+    },
+    {
+      "id": "AUD-MU7D05D6",
+      "action": "UPLOAD_MEDIA",
+      "entity": "Media",
+      "entityId": "MED-MU7D05D6",
+      "details": "Uploaded media: AG1",
+      "timestamp": "2026-09-18T19:36:25.386Z"
+    },
+    {
+      "id": "AUD-MU7CWFOF",
+      "action": "UPDATE_CAMPAIGN",
+      "entity": "Campaign",
+      "entityId": "CAMP-MU7CRQQW",
+      "details": "Updated campaign status to: active",
+      "timestamp": "2026-09-18T19:33:32.127Z"
+    },
+    {
+      "id": "AUD-MU7CUVHE",
+      "action": "UPDATE_CAMPAIGN",
+      "entity": "Campaign",
+      "entityId": "CAMP-MU7CRQQW",
+      "details": "Updated campaign status to: active",
+      "timestamp": "2026-09-18T19:32:19.298Z"
+    },
+    {
+      "id": "AUD-MU7CTLP8",
+      "action": "UPDATE_CAMPAIGN",
+      "entity": "Campaign",
+      "entityId": "CAMP-MU7CRQQW",
+      "details": "Updated campaign status to: active",
+      "timestamp": "2026-09-18T19:31:19.964Z"
+    },
+    {
+      "id": "AUD-MU7CTCMY",
+      "action": "UPDATE_SCREEN",
+      "entity": "Screen",
+      "entityId": "SCR-SCR-541",
+      "details": "Updated screen parameters: {\"currentContent\":\"queue\"}",
+      "timestamp": "2026-09-18T19:31:08.218Z"
+    },
+    {
+      "id": "AUD-MU7CRQQW",
+      "action": "CREATE_CAMPAIGN",
+      "entity": "Campaign",
+      "entityId": "CAMP-MU7CRQQW",
+      "details": "Created department campaign: Hand-Wash Information",
+      "timestamp": "2026-09-18T19:29:53.192Z"
+    },
+    {
+      "id": "AUD-MU7CQ2TG",
+      "action": "UPLOAD_MEDIA",
+      "entity": "Media",
+      "entityId": "MED-MU7CQ2TG",
+      "details": "Uploaded media: AG",
+      "timestamp": "2026-09-18T19:28:35.524Z"
+    },
+    {
+      "id": "AUD-MU7BWJO6",
+      "action": "CREATE_DEPARTMENT",
+      "entity": "Department",
+      "entityId": "DEP-OPD-1",
+      "details": "Created department: Nepro",
+      "timestamp": "2026-09-18T19:05:37.686Z"
+    },
+    {
+      "id": "AUD-MU7BU0HC",
+      "action": "TEST_DISPLAY",
+      "entity": "Screen",
+      "entityId": "SCR-SCR-541",
+      "details": "Triggered test display",
+      "timestamp": "2026-09-18T19:03:39.504Z"
+    },
+    {
+      "id": "AUD-MU7BT5CX",
+      "action": "UPDATE_SCREEN",
+      "entity": "Screen",
+      "entityId": "SCR-SCR-541",
+      "details": "Updated screen parameters: {\"name\":\"rr\",\"queueUrl\":\"https://hms.jjmhospitalkashipur.com/qd/DOC038\",\"departmentId\":\"GENERAL\",\"location\":\"1\"}",
+      "timestamp": "2026-09-18T19:02:59.169Z"
+    },
+    {
+      "id": "AUD-MU7BR2MR",
+      "action": "PAIR_DEVICE",
+      "entity": "Screen",
+      "entityId": "SCR-SCR-541",
+      "details": "Device paired with code 978810 as rr",
+      "timestamp": "2026-09-18T19:01:22.323Z"
+    },
+    {
+      "id": "AUD-MU7BR2MP",
+      "action": "CREATE_SCREEN",
+      "entity": "Screen",
+      "entityId": "SCR-SCR-541",
+      "details": "Created screen: rr (https://jjmhospitalkashipur.com/qd/DOC036)",
+      "timestamp": "2026-09-18T19:01:22.321Z"
+    }
+  ],
+  "emergencyAnnouncement": {
+    "id": "EMERG-MU86M6E8",
+    "title": "SPECIALIST DOCTOR SCHEDULE NOTICE",
+    "message": "Dr. Sharma (Cardiology DOC036) will be attending an emergency surgery from 1:00 PM to 2:30 PM. Token queue will resume shortly.",
+    "severity": "info",
+    "displayMode": "takeover",
+    "highlightScreen": true,
+    "active": true,
+    "createdAt": "2026-09-19T09:25:22.016Z"
+  }
 }

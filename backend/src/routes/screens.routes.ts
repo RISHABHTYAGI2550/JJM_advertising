@@ -183,4 +183,25 @@ router.post('/:id/test-content', (req: Request, res: Response) => {
   return res.json({ success: true, message: 'Test display command sent' });
 });
 
+// POST Toggle Play / Pause on Screen
+router.post('/:id/toggle-pause', (req: Request, res: Response) => {
+  const screen = db.getScreenById(req.params.id);
+  if (!screen) {
+    return res.status(404).json({ success: false, message: 'Screen not found' });
+  }
+
+  const newPaused = !screen.isPaused;
+  const updated = db.updateScreen(screen.id, { isPaused: newPaused });
+
+  if (io) {
+    const config = resolverService.resolveScreenConfig(screen.id);
+    io.to(`screen:${screen.id}`).emit('config:update', { config });
+    io.to(`screen:${screen.id}`).emit('command:playback', { isPaused: newPaused });
+    io.emit('screens:changed');
+  }
+
+  db.logAudit('TOGGLE_PAUSE_SCREEN', 'Screen', screen.id, `Screen playback ${newPaused ? 'PAUSED' : 'RESUMED'}`);
+  return res.json({ success: true, isPaused: newPaused, screen: updated });
+});
+
 export default router;

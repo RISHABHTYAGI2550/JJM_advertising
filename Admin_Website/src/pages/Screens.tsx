@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Tv, Plus, Search, RefreshCw, Edit2, Settings, ExternalLink } from 'lucide-react';
+import { Tv, Plus, Search, RefreshCw, Edit2, Play, Pause, Loader2 } from 'lucide-react';
 import { Screen, Department } from '../types';
+import { api } from '../services/api';
 
 interface ScreensPageProps {
   screens: Screen[];
@@ -20,6 +21,20 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDept, setSelectedDept] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const handleTogglePause = async (screenId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTogglingId(screenId);
+    try {
+      await api.post(`/screens/${screenId}/toggle-pause`);
+      onRefreshScreens();
+    } catch (err: any) {
+      alert(`Failed to toggle screen playback: ${err.message}`);
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   const filteredScreens = screens.filter((s) => {
     const matchesSearch =
@@ -155,16 +170,36 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
                     </span>
                   </div>
                 </div>
-                <span className={`status-badge ${screen.connectionStatus}`}>
-                  <span
-                    className={
-                      screen.connectionStatus === 'online'
-                        ? 'pulse-dot-online'
-                        : 'pulse-dot-offline'
-                    }
-                  />
-                  {screen.connectionStatus}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {screen.isPaused && (
+                    <span
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '12px',
+                        fontSize: '0.675rem',
+                        fontWeight: 800,
+                        backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                        color: '#DC2626',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <Pause size={10} fill="currentColor" /> PAUSED
+                    </span>
+                  )}
+                  <span className={`status-badge ${screen.connectionStatus}`}>
+                    <span
+                      className={
+                        screen.connectionStatus === 'online'
+                          ? 'pulse-dot-online'
+                          : 'pulse-dot-offline'
+                      }
+                    />
+                    {screen.connectionStatus}
+                  </span>
+                </div>
               </div>
 
               {/* Location */}
@@ -206,7 +241,7 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
                 </div>
               </div>
 
-              {/* Action Buttons: Edit / Manage */}
+              {/* Action Buttons: Edit / Manage / Play / Pause */}
               <div
                 style={{
                   display: 'flex',
@@ -221,6 +256,34 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
                   ID: {screen.id}
                 </span>
                 <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className={`btn btn-sm ${screen.isPaused ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={(e) => handleTogglePause(screen.id, e)}
+                    disabled={togglingId === screen.id}
+                    title={screen.isPaused ? 'Resume Screen Playback' : 'Pause Screen Playback'}
+                    style={
+                      screen.isPaused
+                        ? {
+                            backgroundColor: '#10B981',
+                            borderColor: '#10B981',
+                            color: '#ffffff',
+                          }
+                        : {
+                            color: '#DC2626',
+                            borderColor: 'rgba(220, 38, 38, 0.3)',
+                          }
+                    }
+                  >
+                    {togglingId === screen.id ? (
+                      <Loader2 size={13} className="spin" />
+                    ) : screen.isPaused ? (
+                      <Play size={13} fill="currentColor" />
+                    ) : (
+                      <Pause size={13} fill="currentColor" />
+                    )}
+                    <span>{screen.isPaused ? 'Resume TV' : 'Pause TV'}</span>
+                  </button>
+
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={() => onSelectScreen(screen)}

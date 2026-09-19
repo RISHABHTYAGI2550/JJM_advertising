@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, RefreshCw, Send, Trash2, ExternalLink, Tv } from 'lucide-react';
+import { X, RefreshCw, Send, Trash2, ExternalLink, Tv, Play, Pause } from 'lucide-react';
 import { Screen, Department } from '../types';
 import { api } from '../services/api';
 
@@ -86,6 +86,22 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
       onClose();
     } catch (err: any) {
       alert(`Failed to unpair: ${err.message}`);
+    }
+  };
+
+  const handleTogglePause = async () => {
+    if (!screen) return;
+    setLoading(true);
+    try {
+      const res = await api.post(`/screens/${screen.id}/toggle-pause`);
+      if (res.data.success) {
+        setFeedback(`TV playback ${res.data.isPaused ? 'PAUSED' : 'RESUMED'} in real time!`);
+        onRefreshList();
+      }
+    } catch (err: any) {
+      setFeedback(`Error toggling playback: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -199,7 +215,25 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
               Send instant commands to the running TV kiosk
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              className={`btn btn-sm ${screen.isPaused ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={handleTogglePause}
+              disabled={loading}
+              title={screen.isPaused ? 'Resume Screen Playback' : 'Pause Screen Playback'}
+              style={
+                screen.isPaused
+                  ? { backgroundColor: '#10B981', borderColor: '#10B981', color: '#fff' }
+                  : { color: '#DC2626', borderColor: 'rgba(220, 38, 38, 0.3)' }
+              }
+            >
+              {screen.isPaused ? (
+                <Play size={13} fill="currentColor" />
+              ) : (
+                <Pause size={13} fill="currentColor" />
+              )}
+              <span>{screen.isPaused ? 'Resume TV' : 'Pause TV'}</span>
+            </button>
             <button className="btn btn-secondary btn-sm" onClick={handleRemoteRefresh}>
               <RefreshCw size={13} /> Refresh TV
             </button>

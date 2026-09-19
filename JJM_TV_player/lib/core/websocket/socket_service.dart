@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../config/app_config.dart';
 import '../storage/storage_service.dart';
+import '../network/api_service.dart';
 import '../../models/display_models.dart';
 
 class SocketService {

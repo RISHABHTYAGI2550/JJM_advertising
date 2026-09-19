@@ -12,6 +12,8 @@ import playlistsRouter from './routes/playlists.routes';
 import displayRouter from './routes/display.routes';
 import auditRouter from './routes/audit.routes';
 
+import emergencyRouter from './routes/emergency.routes';
+
 const app = express();
 const server = http.createServer(app);
 
@@ -28,8 +30,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static uploaded media
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Serve static uploaded media with open CORS
+app.use(
+  '/uploads',
+  cors(),
+  express.static(path.join(__dirname, '../uploads'), {
+    setHeaders: (res) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    },
+  })
+);
 
 // Mount API routes
 app.use('/api/screens', screensRouter);
@@ -39,6 +49,7 @@ app.use('/api/campaigns', campaignsRouter);
 app.use('/api/playlists', playlistsRouter);
 app.use('/api/display', displayRouter);
 app.use('/api/audit-logs', auditRouter);
+app.use('/api/emergency', emergencyRouter);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

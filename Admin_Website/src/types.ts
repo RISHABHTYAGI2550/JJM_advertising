@@ -26,6 +26,7 @@ export interface Screen {
   playlistId: string | null;
   deviceToken: string | null;
   playerVersion: string;
+  isPaused?: boolean;
   deviceMetadata?: {
     platform?: string;
     model?: string;
@@ -72,7 +73,7 @@ export interface Campaign {
   name: string;
   description: string;
   type: 'global' | 'department' | 'screen' | 'emergency';
-  contentType?: 'playlist' | 'single_image' | 'only_queue';
+  contentType?: 'playlist' | 'single_image' | 'single_image_only' | 'only_queue';
   targetIds: string[];
   mediaId?: string;
   mediaUrl?: string;
@@ -84,6 +85,17 @@ export interface Campaign {
   endTime?: string;
   daysOfWeek: number[];
   status: 'active' | 'scheduled' | 'paused' | 'expired';
+  createdAt: string;
+}
+
+export interface EmergencyAnnouncement {
+  id: string;
+  title: string;
+  message: string;
+  severity: 'critical' | 'warning' | 'info';
+  displayMode: 'takeover' | 'banner' | 'both';
+  highlightScreen: boolean;
+  active: boolean;
   createdAt: string;
 }
 

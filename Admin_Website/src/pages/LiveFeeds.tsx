@@ -13,6 +13,8 @@ import {
   Volume2,
   VolumeX,
   Megaphone,
+  Play,
+  Pause,
 } from 'lucide-react';
 import { Screen, Department, Campaign, Playlist, MediaItem } from '../types';
 import { api } from '../services/api';
@@ -158,6 +160,15 @@ export const LiveFeeds: React.FC<LiveFeedsProps> = ({
       onRefresh();
     } catch (err: any) {
       alert(`Failed to set queue mode: ${err.message}`);
+    }
+  };
+
+  const handleToggleScreenPause = async (screenId: string) => {
+    try {
+      await api.post(`/screens/${screenId}/toggle-pause`);
+      onRefresh();
+    } catch (err: any) {
+      alert(`Failed to toggle screen playback: ${err.message}`);
     }
   };
 
@@ -346,6 +357,24 @@ export const LiveFeeds: React.FC<LiveFeedsProps> = ({
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {screen.isPaused && (
+                      <span
+                        style={{
+                          backgroundColor: 'rgba(239, 68, 68, 0.25)',
+                          color: '#fca5a5',
+                          border: '1px solid rgba(239, 68, 68, 0.4)',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontWeight: 800,
+                          fontSize: '0.625rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                        }}
+                      >
+                        <Pause size={9} fill="currentColor" /> PAUSED
+                      </span>
+                    )}
                     {isOnline ? (
                       <span
                         style={{
@@ -630,6 +659,35 @@ export const LiveFeeds: React.FC<LiveFeedsProps> = ({
                     title="Switch TV directly to Doctor Queue Token"
                   >
                     Queue
+                  </button>
+
+                  <button
+                    onClick={() => handleToggleScreenPause(screen.id)}
+                    style={{
+                      background: screen.isPaused
+                        ? 'rgba(16, 185, 129, 0.2)'
+                        : 'rgba(239, 68, 68, 0.15)',
+                      border: screen.isPaused
+                        ? '1px solid rgba(16, 185, 129, 0.4)'
+                        : '1px solid rgba(239, 68, 68, 0.3)',
+                      color: screen.isPaused ? '#34d399' : '#f87171',
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontSize: '0.675rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                    title={screen.isPaused ? 'Resume Screen Playback' : 'Pause Screen Playback'}
+                  >
+                    {screen.isPaused ? (
+                      <Play size={10} fill="currentColor" />
+                    ) : (
+                      <Pause size={10} fill="currentColor" />
+                    )}
+                    {screen.isPaused ? 'Resume' : 'Pause'}
                   </button>
                 </div>
 

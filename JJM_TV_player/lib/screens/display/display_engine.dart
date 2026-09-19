@@ -24,11 +24,12 @@ class DisplayEngine extends StatefulWidget {
   State<DisplayEngine> createState() => _DisplayEngineState();
 }
 
-class _DisplayEngineState extends State<DisplayEngine> {
+class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProviderStateMixin {
   ResolvedConfig? _config;
   int _currentIndex = 0;
   Timer? _itemTimer;
   Timer? _pollTimer;
+  String _serverBaseUrl = '';
 
   // Controllers
   WebViewController? _webViewController;
@@ -39,10 +40,24 @@ class _DisplayEngineState extends State<DisplayEngine> {
   String? _testMessage;
   Timer? _testMessageTimer;
 
+  // Pulse animation controller for emergency highlights
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
+
   @override
   void initState() {
     super.initState();
     _config = widget.initialConfig;
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+
+    _pulseAnimation = Tween<double>(begin: 0.85, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
     _initEngine();
   }
 
@@ -52,10 +67,36 @@ class _DisplayEngineState extends State<DisplayEngine> {
     _pollTimer?.cancel();
     _testMessageTimer?.cancel();
     _videoController?.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
+  /// Resolves relative URLs (/uploads/...) to absolute server URLs
+  /// and maps 'localhost' to the actual server IP on real Android TV devices
+  String _resolveMediaUrl(String? rawUrl) {
+    if (rawUrl == null || rawUrl.isEmpty) return '';
+    String url = rawUrl.trim();
+
+    if (url.startsWith('/')) {
+      if (_serverBaseUrl.isNotEmpty) {
+        url = '$_serverBaseUrl$url';
+      }
+    }
+
+    if (!kIsWeb && _serverBaseUrl.isNotEmpty && url.contains('localhost')) {
+      final serverUri = Uri.tryParse(_serverBaseUrl);
+      if (serverUri != null && serverUri.host.isNotEmpty && serverUri.host != 'localhost') {
+        url = url.replaceAll('localhost', serverUri.host);
+      }
+    }
+
+    return url;
+  }
+
   Future<void> _initEngine() async {
+    // 0. Cache base server URL for media resolution
+    _serverBaseUrl = await ApiService.getBaseUrl();
+
     // 1. Fetch fresh config or use initial/cache
     _config ??= await ApiService.fetchDisplayConfig(widget.screenId);
 
@@ -72,12 +113,21 @@ class _DisplayEngineState extends State<DisplayEngine> {
 
     SocketService.onConfigUpdate = (newConfig) {
       if (mounted) {
+        final wasPaused = _config?.settings['isPaused'] == true;
+        final isNowPaused = newConfig.settings['isPaused'] == true;
+
         setState(() {
           _config = newConfig;
         });
+
         // Check if queue URL changed
         if (_loadedQueueUrl != newConfig.queueUrl) {
           _setupWebView(newConfig.queueUrl);
+        }
+
+        // Handle pause state transitions
+        if (wasPaused != isNowPaused || isNowPaused) {
+          _startPlayback();
         }
       }
     };
@@ -149,6 +199,8 @@ class _DisplayEngineState extends State<DisplayEngine> {
       return;
     }
 
+    final isPaused = _config?.settings['isPaused'] == true;
+
     final currentItem = _config!.playlist[_currentIndex];
     final durationSeconds = currentItem.duration > 0 ? currentItem.duration : 15;
 
@@ -168,9 +220,12 @@ class _DisplayEngineState extends State<DisplayEngine> {
       }
     }
 
-    _itemTimer = Timer(Duration(seconds: durationSeconds), () {
-      _nextItem();
-    });
+    // Only set timer to advance if NOT paused and there is more than 1 item
+    if (!isPaused && _config!.playlist.length > 1) {
+      _itemTimer = Timer(Duration(seconds: durationSeconds), () {
+        _nextItem();
+      });
+    }
   }
 
   void _nextItem() {
@@ -187,8 +242,14 @@ class _DisplayEngineState extends State<DisplayEngine> {
     _startPlayback();
   }
 
-  void _playVideo(String url) {
+  void _playVideo(String rawUrl) {
     _videoController?.dispose();
+    final url = _resolveMediaUrl(rawUrl);
+    if (url.isEmpty) {
+      _nextItem();
+      return;
+    }
+
     try {
       final controller = VideoPlayerController.networkUrl(Uri.parse(url));
       controller.initialize().then((_) {
@@ -213,7 +274,15 @@ class _DisplayEngineState extends State<DisplayEngine> {
         ? _config!.playlist[_currentIndex]
         : null;
 
-    final mediaUrl = currentItem?.mediaUrl ?? '';
+    final mediaUrl = _resolveMediaUrl(currentItem?.mediaUrl);
+    final isPaused = _config?.settings['isPaused'] == true;
+
+    final dynamic emergencyData = _config?.settings['emergencyAnnouncement'];
+    final Map<String, dynamic>? emergency = (emergencyData is Map)
+        ? Map<String, dynamic>.from(emergencyData)
+        : null;
+    final bool isEmergencyActive = emergency != null && emergency['isActive'] == true;
+    final String emergencyMode = emergency?['displayMode'] ?? 'takeover';
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B1329),
@@ -227,36 +296,55 @@ class _DisplayEngineState extends State<DisplayEngine> {
             _buildWebFallbackQueue(),
 
           // LAYER 2: Advertisement Layer (Smooth fade overlay on top of queue)
+          // Responsive on phones, tablets, laptops, and TV screens without cut-offs
           AnimatedOpacity(
-            opacity: _isShowingAd ? 1.0 : 0.0,
+            opacity: (_isShowingAd && (!isEmergencyActive || emergencyMode == 'banner')) ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 600),
             child: IgnorePointer(
-              ignoring: !_isShowingAd,
+              ignoring: !_isShowingAd || (isEmergencyActive && emergencyMode == 'takeover'),
               child: _buildAdOverlay(currentItem, mediaUrl),
             ),
           ),
 
-          // LAYER 3: Emergency / Hospital Announcement Bottom Ticker
-          if (_config?.announcementTicker != null)
+          // LAYER 3: Emergency Announcement Layer
+          if (isEmergencyActive)
+            emergencyMode == 'takeover'
+                ? _buildEmergencyTakeover(emergency)
+                : _buildEmergencyBanner(emergency)
+          else if (_config?.announcementTicker != null)
+            _buildLegacyTicker(_config!.announcementTicker!),
+
+          // LAYER 4: Paused Indicator Pill
+          if (isPaused)
             Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
+              top: 18,
+              right: 20,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                color: const Color(0xFFDC2626),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE11D48).withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1),
+                ),
                 child: Row(
-                  children: [
-                    const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 22),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _config!.announcementTicker!,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.pause_circle_filled_rounded, color: Colors.white, size: 16),
+                    SizedBox(width: 7),
+                    Text(
+                      "PLAYBACK PAUSED",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
                       ),
                     ),
                   ],
@@ -264,7 +352,7 @@ class _DisplayEngineState extends State<DisplayEngine> {
               ),
             ),
 
-          // LAYER 4: Remote Test Notification Banner
+          // LAYER 5: Remote Test Notification Banner
           if (_testMessage != null)
             Positioned(
               top: 20,
@@ -348,6 +436,9 @@ class _DisplayEngineState extends State<DisplayEngine> {
     );
   }
 
+  /// Responsive Ad Overlay:
+  /// Uses BoxFit.contain within FittedBox + ambient dark blurred background
+  /// to ensure posters/videos never get cut off on phones, tablets, laptops, or TV displays.
   Widget _buildAdOverlay(PlaylistItem? item, String mediaUrl) {
     if (item == null) return const SizedBox.shrink();
 
@@ -355,9 +446,13 @@ class _DisplayEngineState extends State<DisplayEngine> {
       return Container(
         color: Colors.black,
         child: Center(
-          child: AspectRatio(
-            aspectRatio: _videoController!.value.aspectRatio,
-            child: VideoPlayer(_videoController!),
+          child: FittedBox(
+            fit: BoxFit.contain,
+            child: SizedBox(
+              width: _videoController!.value.size.width,
+              height: _videoController!.value.size.height,
+              child: VideoPlayer(_videoController!),
+            ),
           ),
         ),
       );
@@ -365,25 +460,54 @@ class _DisplayEngineState extends State<DisplayEngine> {
 
     if (item.type == 'image' && mediaUrl.isNotEmpty) {
       return Container(
-        color: Colors.black,
-        child: CachedNetworkImage(
-          imageUrl: mediaUrl,
-          fit: BoxFit.cover,
-          placeholder: (context, url) => Container(
-            color: const Color(0xFF0F172A),
-            child: const Center(
-              child: CircularProgressIndicator(color: Color(0xFF38BDF8)),
-            ),
-          ),
-          errorWidget: (context, url, error) => Container(
-            color: const Color(0xFF0F172A),
-            child: Center(
-              child: Text(
-                item.title,
-                style: const TextStyle(color: Colors.white, fontSize: 24),
+        color: const Color(0xFF070A12),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Ambient darkened background blur
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.18,
+                child: CachedNetworkImage(
+                  imageUrl: mediaUrl,
+                  fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                ),
               ),
             ),
-          ),
+            // Perfectly responsive ad image without ANY cutting on any screen size
+            Center(
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: CachedNetworkImage(
+                  imageUrl: mediaUrl,
+                  fit: BoxFit.contain,
+                  placeholder: (context, url) => Container(
+                    padding: const EdgeInsets.all(40),
+                    child: const CircularProgressIndicator(color: Color(0xFF9D6BBA)),
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.broken_image_rounded, color: Color(0xFFE11D48), size: 48),
+                        const SizedBox(height: 12),
+                        Text(
+                          item.title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -396,14 +520,373 @@ class _DisplayEngineState extends State<DisplayEngine> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.campaign_rounded, color: Color(0xFF38BDF8), size: 72),
+          const Icon(Icons.campaign_rounded, color: Color(0xFF9D6BBA), size: 72),
           const SizedBox(height: 20),
           Text(
             item.title,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900),
+            style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w900),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Emergency Full-Screen Takeover with hospital logo, name, heading, and screen highlight
+  Widget _buildEmergencyTakeover(Map<String, dynamic> emergency) {
+    final severity = emergency['severity']?.toString() ?? 'critical';
+    final title = emergency['title']?.toString().isNotEmpty == true
+        ? emergency['title']
+        : 'IMPORTANT HOSPITAL ANNOUNCEMENT';
+    final message = emergency['message']?.toString() ?? '';
+    final screenHighlight = emergency['screenHighlight'] == true;
+
+    Color bgTop;
+    Color bgBottom;
+    Color accentColor;
+    String badgeLabel;
+    IconData icon;
+
+    if (severity == 'critical') {
+      bgTop = const Color(0xFF881337);
+      bgBottom = const Color(0xFF4C0519);
+      accentColor = const Color(0xFFF43F5E);
+      badgeLabel = 'CRITICAL EMERGENCY CODE RED / आपातकालीन चेतावनी';
+      icon = Icons.warning_rounded;
+    } else if (severity == 'warning') {
+      bgTop = const Color(0xFF78350F);
+      bgBottom = const Color(0xFF451A03);
+      accentColor = const Color(0xFFF59E0B);
+      badgeLabel = 'IMPORTANT HOSPITAL NOTICE / महत्वपूर्ण सूचना';
+      icon = Icons.notification_important_rounded;
+    } else {
+      bgTop = const Color(0xFF4C1D95);
+      bgBottom = const Color(0xFF2E1065);
+      accentColor = const Color(0xFFA855F7);
+      badgeLabel = 'OFFICIAL HOSPITAL ANNOUNCEMENT / जनहित सूचना';
+      icon = Icons.campaign_rounded;
+    }
+
+    return AnimatedBuilder(
+      animation: _pulseAnimation,
+      builder: (context, child) {
+        final highlightScale = screenHighlight ? _pulseAnimation.value : 1.0;
+
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [bgTop, bgBottom],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            border: Border.all(
+              color: screenHighlight ? accentColor.withValues(alpha: highlightScale) : accentColor,
+              width: screenHighlight ? 8 : 4,
+            ),
+            boxShadow: screenHighlight
+                ? [
+                    BoxShadow(
+                      color: accentColor.withValues(alpha: 0.5 * highlightScale),
+                      blurRadius: 36,
+                      spreadRadius: 8,
+                    ),
+                  ]
+                : null,
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 28),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Top Hospital Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Hospital Branding
+                      Row(
+                        children: [
+                          Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: const [
+                                BoxShadow(color: Colors.black26, blurRadius: 10),
+                              ],
+                            ),
+                            child: const Center(
+                              child: Icon(
+                                Icons.local_hospital_rounded,
+                                color: Color(0xFF6B3A8A),
+                                size: 34,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Text(
+                                "JJM HOSPITAL KASHIPUR",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                              Text(
+                                "ADVANCED MULTISPECIALITY & EMERGENCY TRAUMA CENTRE",
+                                style: TextStyle(
+                                  color: Color(0xFFFDE047),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.1,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+
+                      // Live Emergency Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: accentColor,
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: accentColor.withValues(alpha: 0.6),
+                              blurRadius: 16,
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(icon, color: Colors.white, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              badgeLabel,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Center Announcement Card
+                  Expanded(
+                    child: Center(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 24),
+                        padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 36),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.25),
+                            width: 2,
+                          ),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black45, blurRadius: 25),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              title.toUpperCase(),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Color(0xFFFDE047),
+                                fontSize: 32,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            Container(
+                              height: 3,
+                              width: 140,
+                              decoration: BoxDecoration(
+                                color: accentColor,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            Text(
+                              message,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w600,
+                                height: 1.45,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Bottom Authorized Footer
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: const [
+                        Text(
+                          "Direct Central Broadcast • JJM Hospital Administration & Emergency Operations",
+                          style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          "All Displays Active • 24x7 Emergency Services",
+                          style: TextStyle(color: Color(0xFFFDE047), fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Emergency Bottom Banner Overlay
+  Widget _buildEmergencyBanner(Map<String, dynamic> emergency) {
+    final severity = emergency['severity']?.toString() ?? 'critical';
+    final title = emergency['title']?.toString() ?? 'IMPORTANT ANNOUNCEMENT';
+    final message = emergency['message']?.toString() ?? '';
+    final screenHighlight = emergency['screenHighlight'] == true;
+
+    Color bannerBg = severity == 'critical'
+        ? const Color(0xFFDC2626)
+        : severity == 'warning'
+            ? const Color(0xFFD97706)
+            : const Color(0xFF6B3A8A);
+
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: AnimatedBuilder(
+        animation: _pulseAnimation,
+        builder: (context, child) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            decoration: BoxDecoration(
+              color: bannerBg,
+              border: screenHighlight
+                  ? Border(
+                      top: BorderSide(
+                        color: Colors.yellowAccent.withValues(alpha: _pulseAnimation.value),
+                        width: 4,
+                      ),
+                    )
+                  : null,
+              boxShadow: const [
+                BoxShadow(color: Colors.black45, blurRadius: 16, offset: Offset(0, -3)),
+              ],
+            ),
+            child: Row(
+              children: [
+                // Hospital Logo Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.local_hospital_rounded, color: Color(0xFF6B3A8A), size: 16),
+                      SizedBox(width: 4),
+                      Text(
+                        "JJM HOSPITAL",
+                        style: TextStyle(
+                          color: Color(0xFF6B3A8A),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 14),
+                // Heading
+                Text(
+                  "[$title]: ",
+                  style: const TextStyle(
+                    color: Color(0xFFFDE047),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                // Message
+                Expanded(
+                  child: Text(
+                    message,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildLegacyTicker(String tickerText) {
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        color: const Color(0xFFDC2626),
+        child: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                tickerText,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -11,6 +11,7 @@ import {
   Video,
   CheckCircle2,
   AlertTriangle,
+  Pause,
 } from 'lucide-react';
 import { Screen, Department, MediaItem, Campaign } from '../types';
 import { api } from '../services/api';
@@ -503,16 +504,36 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       {dept?.name || 'Department'} • {screen.location}
                     </span>
                   </div>
-                  <span className={`status-badge ${screen.connectionStatus}`}>
-                    <span
-                      className={
-                        screen.connectionStatus === 'online'
-                          ? 'pulse-dot-online'
-                          : 'pulse-dot-offline'
-                      }
-                    />
-                    {screen.connectionStatus}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {screen.isPaused && (
+                      <span
+                        style={{
+                          padding: '2px 7px',
+                          borderRadius: '10px',
+                          fontSize: '0.65rem',
+                          fontWeight: 800,
+                          backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                          color: '#DC2626',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                        }}
+                      >
+                        <Pause size={9} fill="currentColor" /> PAUSED
+                      </span>
+                    )}
+                    <span className={`status-badge ${screen.connectionStatus}`}>
+                      <span
+                        className={
+                          screen.connectionStatus === 'online'
+                            ? 'pulse-dot-online'
+                            : 'pulse-dot-offline'
+                        }
+                      />
+                      {screen.connectionStatus}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Queue Display URL Preview */}

@@ -137,4 +137,27 @@ router.delete('/:id', (req: Request, res: Response) => {
   return res.json({ success: true, message: 'Campaign deleted' });
 });
 
+router.post('/:id/toggle-pause', (req: Request, res: Response) => {
+  const campaign = db.getCampaignById(req.params.id);
+  if (!campaign) {
+    return res.status(404).json({ success: false, message: 'Campaign not found' });
+  }
+
+  const newStatus = campaign.status === 'active' ? 'paused' : 'active';
+  const updated = db.updateCampaign(campaign.id, { status: newStatus });
+
+  if (io) {
+    db.getScreens().forEach(s => {
+      try {
+        const config = resolverService.resolveScreenConfig(s.id);
+        io.to(`screen:${s.id}`).emit('config:update', { config });
+      } catch {}
+    });
+    io.emit('screens:changed');
+  }
+
+  db.logAudit('TOGGLE_PAUSE_CAMPAIGN', 'Campaign', campaign.id, `Campaign status changed to ${newStatus}`);
+  return res.json({ success: true, status: newStatus, campaign: updated });
+});
+
 export default router;

@@ -35,9 +35,7 @@ export const MediaLibraryPage: React.FC<MediaLibraryPageProps> = ({
       formData.append('tags', tags);
       formData.append('category', category);
 
-      await api.post('/media', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await api.post('/media', formData);
 
       setShowUploadModal(false);
       setTitle('');

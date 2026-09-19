@@ -41,7 +41,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [campaignContentType, setCampaignContentType] = useState<
-    'playlist' | 'single_image' | 'only_queue'
+    'playlist' | 'single_image' | 'single_image_only' | 'only_queue'
   >('single_image');
   const [targetScope, setTargetScope] = useState<'global' | 'department' | 'screen'>('global');
   const [targetId, setTargetId] = useState('');
@@ -78,6 +78,9 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
     setPriority(c.priority || 70);
   };
 
+  const isImageContentType =
+    campaignContentType === 'single_image' || campaignContentType === 'single_image_only';
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -92,8 +95,8 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
         type: targetScope === 'global' ? 'global' : targetScope,
         contentType: campaignContentType,
         targetIds,
-        mediaId: campaignContentType === 'single_image' ? selectedMedia?.id : undefined,
-        mediaUrl: campaignContentType === 'single_image' ? selectedMedia?.url : undefined,
+        mediaId: isImageContentType ? selectedMedia?.id : undefined,
+        mediaUrl: isImageContentType ? selectedMedia?.url : undefined,
         playlistId: campaignContentType === 'playlist' ? selectedPlaylistId : undefined,
         priority: Number(priority),
         status: 'active',
@@ -123,8 +126,8 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
         type: targetScope === 'global' ? 'global' : targetScope,
         contentType: campaignContentType,
         targetIds,
-        mediaId: campaignContentType === 'single_image' ? selectedMedia?.id : undefined,
-        mediaUrl: campaignContentType === 'single_image' ? selectedMedia?.url : undefined,
+        mediaId: isImageContentType ? selectedMedia?.id : undefined,
+        mediaUrl: isImageContentType ? selectedMedia?.url : undefined,
         playlistId: campaignContentType === 'playlist' ? selectedPlaylistId : undefined,
         priority: Number(priority),
       });
@@ -390,9 +393,9 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
               {/* 3 Campaign Types Selection */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
-                  Campaign Type (3 Modes)
+                  Campaign Type (Display Mode)
                 </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px' }}>
                   <button
                     type="button"
                     onClick={() => setCampaignContentType('playlist')}
@@ -452,7 +455,38 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                     }}
                   >
                     <ImageIcon size={20} />
-                    <span>Single Image</span>
+                    <span>Image + Queue</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCampaignContentType('single_image_only')}
+                    style={{
+                      padding: '12px 10px',
+                      borderRadius: '10px',
+                      border:
+                        campaignContentType === 'single_image_only'
+                          ? '2px solid var(--primary)'
+                          : '1px solid var(--border-color)',
+                      backgroundColor:
+                        campaignContentType === 'single_image_only'
+                          ? 'rgba(107, 58, 138, 0.12)'
+                          : '#FFFFFF',
+                      color:
+                        campaignContentType === 'single_image_only'
+                          ? 'var(--primary)'
+                          : 'var(--text-main)',
+                      fontWeight: 700,
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <ImageIcon size={20} />
+                    <span>Solo Image Ad</span>
                   </button>
 
                   <button
@@ -508,7 +542,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                 </div>
               )}
 
-              {campaignContentType === 'single_image' && (
+              {(campaignContentType === 'single_image' || campaignContentType === 'single_image_only') && (
                 <div>
                   <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
                     Select Image from Media Assets

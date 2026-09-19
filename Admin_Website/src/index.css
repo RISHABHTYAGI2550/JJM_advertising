@@ -448,3 +448,35 @@ button, input, select, textarea {
   color: #E2D9EC;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
+
+/* Responsive media queries for Mobile, Tablet, Laptop, and TV screens */
+@media (max-width: 900px) {
+  .app-sidebar {
+    position: fixed !important;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    transform: translateX(-100%);
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.3) !important;
+  }
+  .app-sidebar.mobile-open {
+    transform: translateX(0) !important;
+  }
+  .mobile-menu-btn {
+    display: inline-flex !important;
+  }
+  .mobile-close-btn {
+    display: inline-flex !important;
+  }
+  .hide-on-mobile {
+    display: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .modal-content {
+    max-width: 95vw !important;
+    padding: 16px !important;
+    margin: 10px;
+  }
+}

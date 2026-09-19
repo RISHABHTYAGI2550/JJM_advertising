@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { Department, Screen, PairingSession, MediaItem, Playlist, Campaign, AuditLog } from '../types';
+import { Department, Screen, PairingSession, MediaItem, Playlist, Campaign, AuditLog, EmergencyAnnouncement } from '../types';
 
 interface DatabaseSchema {
   departments: Department[];
@@ -10,6 +10,7 @@ interface DatabaseSchema {
   playlists: Playlist[];
   campaigns: Campaign[];
   auditLogs: AuditLog[];
+  emergencyAnnouncement?: EmergencyAnnouncement | null;
 }
 
 const DATA_DIR = path.join(__dirname, '../../data');
@@ -308,6 +309,22 @@ class Database {
       this.data.auditLogs.shift();
     }
     this.saveData();
+  }
+
+  // Emergency Announcement
+  public getEmergencyAnnouncement(): EmergencyAnnouncement | null {
+    return this.data.emergencyAnnouncement || null;
+  }
+
+  public setEmergencyAnnouncement(announcement: EmergencyAnnouncement | null): EmergencyAnnouncement | null {
+    this.data.emergencyAnnouncement = announcement;
+    this.saveData();
+    if (announcement && announcement.active) {
+      this.logAudit('EMERGENCY_ANNOUNCEMENT_START', 'System', announcement.id, `Started emergency broadcast: ${announcement.title}`);
+    } else {
+      this.logAudit('EMERGENCY_ANNOUNCEMENT_STOP', 'System', 'ALL', 'Stopped emergency broadcast');
+    }
+    return this.data.emergencyAnnouncement;
   }
 }
 

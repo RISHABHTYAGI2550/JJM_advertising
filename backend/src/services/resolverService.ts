@@ -90,6 +90,8 @@ export class ResolverService {
           { id: 'item-1', type: 'queue', title: 'Doctor Live Token Queue', duration: 30, order: 1 },
         ];
 
+    const emergency = db.getEmergencyAnnouncement();
+
     return {
       screenId: screen.id,
       screenName: screen.name,
@@ -102,6 +104,8 @@ export class ResolverService {
         transition: 'fade',
         heartbeatSeconds: 20,
         offlineMediaCached: true,
+        isPaused: !!screen.isPaused,
+        emergencyAnnouncement: emergency && emergency.active ? emergency : null,
       },
       resolvedAt: new Date().toISOString(),
     };
@@ -117,19 +121,40 @@ export class ResolverService {
     let items: PlaylistItem[] = [];
 
     if (campaign.contentType === 'only_queue') {
-      items = [{ id: 'camp-q-only', type: 'queue', title: 'Doctor Live Token Queue', duration: 60, order: 1 }];
-    } else if (campaign.contentType === 'single_image' || (!campaign.contentType && campaign.mediaId && !campaign.playlistId)) {
+      items = [{ id: 'camp-q-only', type: 'queue', title: 'Doctor Live Token Queue', duration: 30, order: 1 }];
+    } else if (campaign.contentType === 'single_image_only') {
       const media = campaign.mediaId ? db.getMediaById(campaign.mediaId) : undefined;
       const mediaUrl = campaign.mediaUrl || media?.url || '';
       items = [
         {
-          id: 'camp-img-1',
+          id: 'camp-img-only',
           type: 'image',
           mediaId: campaign.mediaId,
           mediaUrl,
           title: campaign.name,
           duration: media?.duration || 20,
           order: 1,
+        },
+      ];
+    } else if (campaign.contentType === 'single_image' || (!campaign.contentType && campaign.mediaId && !campaign.playlistId)) {
+      const media = campaign.mediaId ? db.getMediaById(campaign.mediaId) : undefined;
+      const mediaUrl = campaign.mediaUrl || media?.url || '';
+      items = [
+        {
+          id: 'camp-q-1',
+          type: 'queue',
+          title: 'Doctor Live Token Queue',
+          duration: 30,
+          order: 1,
+        },
+        {
+          id: 'camp-img-1',
+          type: 'image',
+          mediaId: campaign.mediaId,
+          mediaUrl,
+          title: campaign.name,
+          duration: media?.duration || 15,
+          order: 2,
         },
       ];
     } else if (campaign.playlistId) {
@@ -143,6 +168,8 @@ export class ResolverService {
       items = [{ id: 'camp-q-only', type: 'queue', title: 'Doctor Live Token Queue', duration: 30, order: 1 }];
     }
 
+    const emergency = db.getEmergencyAnnouncement();
+
     return {
       screenId: screen.id,
       screenName: screen.name,
@@ -154,12 +181,15 @@ export class ResolverService {
         name: campaign.name,
         type: campaign.type,
         priority: campaign.priority,
+        contentType: campaign.contentType,
       },
       playlist: items,
       settings: {
         transition,
         heartbeatSeconds: 20,
         offlineMediaCached: true,
+        isPaused: !!screen.isPaused,
+        emergencyAnnouncement: emergency && emergency.active ? emergency : null,
         announcementTicker: campaign.type === 'emergency' ? campaign.name : undefined,
       },
       resolvedAt: new Date().toISOString(),
