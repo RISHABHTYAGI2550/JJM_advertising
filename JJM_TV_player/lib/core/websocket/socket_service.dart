@@ -96,35 +96,47 @@ class SocketService {
       });
 
       // Listen for real-time play/pause playback command
-      _socket!.on('command:playback', (data) {
+      void handlePlayback(dynamic data) {
         if (data != null && onPlaybackCommand != null) {
-          final isPaused = data['isPaused'] == true;
-          onPlaybackCommand!(isPaused);
+          try {
+            final Map map = data is Map ? data : {};
+            if (map['screenId'] == null || map['screenId'] == _screenId) {
+              final isPaused = map['isPaused'] == true;
+              onPlaybackCommand!(isPaused);
+            }
+          } catch (_) {}
         }
-      });
+      }
 
-      _socket!.on('screen:playback', (data) {
-        if (data != null && onPlaybackCommand != null) {
-          final isPaused = data['isPaused'] == true;
-          onPlaybackCommand!(isPaused);
-        }
-      });
+      _socket!.on('command:playback', handlePlayback);
+      _socket!.on('screen:playback', handlePlayback);
 
       // Listen for emergency announcements
-      _socket!.on('emergency:update', (data) {
+      void handleEmergency(dynamic data) {
         if (onEmergencyUpdate != null) {
-          final announcement = data?['announcement'] as Map<String, dynamic>?;
-          onEmergencyUpdate!(announcement);
+          try {
+            if (data == null) {
+              onEmergencyUpdate!(null);
+              return;
+            }
+            final Map? rawMap = data is Map ? data : null;
+            if (rawMap == null) {
+              onEmergencyUpdate!(null);
+              return;
+            }
+            final dynamic inner = rawMap['announcement'] ?? rawMap;
+            if (inner is Map) {
+              final announcement = Map<String, dynamic>.from(inner);
+              onEmergencyUpdate!(announcement);
+            } else {
+              onEmergencyUpdate!(null);
+            }
+          } catch (_) {}
         }
-      });
+      }
 
-      _socket!.on('emergency:broadcast', (data) {
-        if (onEmergencyUpdate != null) {
-          final announcement = data?['announcement'] as Map<String, dynamic>?;
-          onEmergencyUpdate!(announcement);
-        }
-      });
-
+      _socket!.on('emergency:update', handleEmergency);
+      _socket!.on('emergency:broadcast', handleEmergency);
       _socket!.on('emergency:dismiss', (_) {
         if (onEmergencyUpdate != null) {
           onEmergencyUpdate!(null);

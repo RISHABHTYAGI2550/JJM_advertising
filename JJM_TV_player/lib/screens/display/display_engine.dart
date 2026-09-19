@@ -344,7 +344,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
 
           // LAYER 3: Emergency Announcement Layer
           if (isEmergencyActive)
-            emergencyMode == 'takeover'
+            (emergencyMode == 'takeover' || emergencyMode == 'both')
                 ? _buildEmergencyTakeover(emergency)
                 : _buildEmergencyBanner(emergency)
           else if (_config?.announcementTicker != null)
