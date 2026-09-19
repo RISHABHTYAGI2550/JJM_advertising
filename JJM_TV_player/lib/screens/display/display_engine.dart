@@ -126,9 +126,42 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
         }
 
         // Handle pause state transitions
-        if (wasPaused != isNowPaused || isNowPaused) {
+        if (isNowPaused) {
+          _videoController?.pause();
+          _itemTimer?.cancel();
+        } else if (wasPaused && !isNowPaused) {
+          _videoController?.play();
           _startPlayback();
         }
+      }
+    };
+
+    // Instant real-time playback pause / resume
+    SocketService.onPlaybackCommand = (bool isPaused) {
+      if (mounted) {
+        setState(() {
+          if (_config != null) {
+            _config!.settings['isPaused'] = isPaused;
+          }
+        });
+        if (isPaused) {
+          _videoController?.pause();
+          _itemTimer?.cancel();
+        } else {
+          _videoController?.play();
+          _startPlayback();
+        }
+      }
+    };
+
+    // Instant real-time emergency announcement push / dismiss
+    SocketService.onEmergencyUpdate = (Map<String, dynamic>? announcement) {
+      if (mounted) {
+        setState(() {
+          if (_config != null) {
+            _config!.settings['emergencyAnnouncement'] = announcement;
+          }
+        });
       }
     };
 
@@ -281,8 +314,11 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
     final Map<String, dynamic>? emergency = (emergencyData is Map)
         ? Map<String, dynamic>.from(emergencyData)
         : null;
-    final bool isEmergencyActive = emergency != null && emergency['isActive'] == true;
-    final String emergencyMode = emergency?['displayMode'] ?? 'takeover';
+    final bool isEmergencyActive = emergency != null &&
+        (emergency['active'] == true ||
+         emergency['isActive'] == true ||
+         emergency['status'] == 'active');
+    final String emergencyMode = emergency?['displayMode']?.toString() ?? 'takeover';
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B1329),
@@ -539,7 +575,9 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
         ? emergency['title']
         : 'IMPORTANT HOSPITAL ANNOUNCEMENT';
     final message = emergency['message']?.toString() ?? '';
-    final screenHighlight = emergency['screenHighlight'] == true;
+    final screenHighlight = emergency['screenHighlight'] == true ||
+        emergency['highlightScreen'] == true ||
+        emergency['highlight'] == true;
 
     Color bgTop;
     Color bgBottom;
@@ -775,7 +813,9 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
     final severity = emergency['severity']?.toString() ?? 'critical';
     final title = emergency['title']?.toString() ?? 'IMPORTANT ANNOUNCEMENT';
     final message = emergency['message']?.toString() ?? '';
-    final screenHighlight = emergency['screenHighlight'] == true;
+    final screenHighlight = emergency['screenHighlight'] == true ||
+        emergency['highlightScreen'] == true ||
+        emergency['highlight'] == true;
 
     Color bannerBg = severity == 'critical'
         ? const Color(0xFFDC2626)

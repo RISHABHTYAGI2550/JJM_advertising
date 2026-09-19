@@ -197,6 +197,9 @@ router.post('/:id/toggle-pause', (req: Request, res: Response) => {
     const config = resolverService.resolveScreenConfig(screen.id);
     io.to(`screen:${screen.id}`).emit('config:update', { config });
     io.to(`screen:${screen.id}`).emit('command:playback', { isPaused: newPaused });
+    io.emit('command:playback', { screenId: screen.id, isPaused: newPaused });
+    io.emit('screen:playback', { screenId: screen.id, isPaused: newPaused });
+    io.emit('config:update', { screenId: screen.id, config });
     io.emit('screens:changed');
   }
 

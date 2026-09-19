@@ -15,6 +15,8 @@ class SocketService {
   static Function(String)? onTestCommand;
   static Function()? onUnpaired;
   static Function(bool isConnected)? onConnectionChanged;
+  static Function(bool isPaused)? onPlaybackCommand;
+  static Function(Map<String, dynamic>? announcement)? onEmergencyUpdate;
 
   static Future<void> init({
     String? screenId,
@@ -91,6 +93,42 @@ class SocketService {
       // Listen for unpair/revoke
       _socket!.on('screen:unpaired', (_) {
         onUnpaired?.call();
+      });
+
+      // Listen for real-time play/pause playback command
+      _socket!.on('command:playback', (data) {
+        if (data != null && onPlaybackCommand != null) {
+          final isPaused = data['isPaused'] == true;
+          onPlaybackCommand!(isPaused);
+        }
+      });
+
+      _socket!.on('screen:playback', (data) {
+        if (data != null && onPlaybackCommand != null) {
+          final isPaused = data['isPaused'] == true;
+          onPlaybackCommand!(isPaused);
+        }
+      });
+
+      // Listen for emergency announcements
+      _socket!.on('emergency:update', (data) {
+        if (onEmergencyUpdate != null) {
+          final announcement = data?['announcement'] as Map<String, dynamic>?;
+          onEmergencyUpdate!(announcement);
+        }
+      });
+
+      _socket!.on('emergency:broadcast', (data) {
+        if (onEmergencyUpdate != null) {
+          final announcement = data?['announcement'] as Map<String, dynamic>?;
+          onEmergencyUpdate!(announcement);
+        }
+      });
+
+      _socket!.on('emergency:dismiss', (_) {
+        if (onEmergencyUpdate != null) {
+          onEmergencyUpdate!(null);
+        }
       });
 
     } catch (_) {}

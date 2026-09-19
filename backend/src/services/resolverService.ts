@@ -105,7 +105,17 @@ export class ResolverService {
         heartbeatSeconds: 20,
         offlineMediaCached: true,
         isPaused: !!screen.isPaused,
-        emergencyAnnouncement: emergency && emergency.active ? emergency : null,
+        emergencyAnnouncement:
+          emergency && (emergency.active || (emergency as any).isActive)
+            ? {
+                ...emergency,
+                active: true,
+                isActive: true,
+                status: 'active',
+                highlightScreen: (emergency as any).highlightScreen !== false,
+                screenHighlight: (emergency as any).highlightScreen !== false,
+              }
+            : null,
       },
       resolvedAt: new Date().toISOString(),
     };
@@ -189,7 +199,17 @@ export class ResolverService {
         heartbeatSeconds: 20,
         offlineMediaCached: true,
         isPaused: !!screen.isPaused,
-        emergencyAnnouncement: emergency && emergency.active ? emergency : null,
+        emergencyAnnouncement:
+          emergency && (emergency.active || (emergency as any).isActive)
+            ? {
+                ...emergency,
+                active: true,
+                isActive: true,
+                status: 'active',
+                highlightScreen: (emergency as any).highlightScreen !== false,
+                screenHighlight: (emergency as any).highlightScreen !== false,
+              }
+            : null,
         announcementTicker: campaign.type === 'emergency' ? campaign.name : undefined,
       },
       resolvedAt: new Date().toISOString(),

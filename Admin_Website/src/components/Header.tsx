@@ -1,5 +1,6 @@
 import React from 'react';
-import { Plus, Megaphone, ShieldCheck, LogOut, Menu } from 'lucide-react';
+import { Plus, Megaphone, ShieldCheck, LogOut, Menu, Server } from 'lucide-react';
+import { getActiveBackendUrl, setBackendTarget } from '../services/api';
 
 interface HeaderProps {
   title: string;
@@ -18,6 +19,8 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   onToggleMobileMenu,
 }) => {
+  const activeUrl = getActiveBackendUrl();
+  const isLocal = activeUrl.includes('localhost') || activeUrl.includes('127.0.0.1');
   return (
     <header
       style={{
@@ -76,6 +79,28 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        {/* Backend Server Target Indicator / Toggle */}
+        <button
+          onClick={() => setBackendTarget(isLocal ? 'live' : 'local')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '5px 12px',
+            borderRadius: '20px',
+            border: isLocal ? '1px solid #f59e0b' : '1px solid #10b981',
+            backgroundColor: isLocal ? 'rgba(245, 158, 11, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+            color: isLocal ? '#b45309' : '#047857',
+            fontSize: '0.725rem',
+            fontWeight: 800,
+            cursor: 'pointer',
+          }}
+          title={`Click to switch between Live Cloud and Local Backend (Current: ${activeUrl})`}
+        >
+          <span className={isLocal ? 'pulse-dot-offline' : 'pulse-dot-online'} style={{ width: '7px', height: '7px' }} />
+          <span>{isLocal ? 'DEV: LOCAL (5000)' : 'LIVE CLOUD (RENDER)'}</span>
+        </button>
+
         {/* 1-Click Global Campaign Button */}
         <button
           className="btn btn-secondary btn-sm"

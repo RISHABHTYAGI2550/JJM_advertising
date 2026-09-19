@@ -31,16 +31,23 @@ router.post('/broadcast', (req: Request, res: Response) => {
     createdAt: new Date().toISOString(),
   };
 
+  // Add backward/forward compatible aliases
+  (announcement as any).isActive = true;
+  (announcement as any).screenHighlight = announcement.highlightScreen;
+  (announcement as any).status = 'active';
+
   db.setEmergencyAnnouncement(announcement);
 
   // Broadcast to all screens via Socket.IO
   if (io) {
     io.emit('emergency:update', { announcement });
-    // Also push config update to all screen rooms
+    io.emit('emergency:broadcast', { announcement });
+    // Also push config update to all screen rooms and globally
     db.getScreens().forEach((s) => {
       try {
         const config = resolverService.resolveScreenConfig(s.id);
         io.to(`screen:${s.id}`).emit('config:update', { config });
+        io.emit('config:update', { screenId: s.id, config });
       } catch {}
     });
     io.emit('screens:changed');
@@ -55,10 +62,12 @@ router.post('/dismiss', (req: Request, res: Response) => {
 
   if (io) {
     io.emit('emergency:update', { announcement: null });
+    io.emit('emergency:dismiss', {});
     db.getScreens().forEach((s) => {
       try {
         const config = resolverService.resolveScreenConfig(s.id);
         io.to(`screen:${s.id}`).emit('config:update', { config });
+        io.emit('config:update', { screenId: s.id, config });
       } catch {}
     });
     io.emit('screens:changed');

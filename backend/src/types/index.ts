@@ -117,7 +117,10 @@ export interface EmergencyAnnouncement {
   severity: 'critical' | 'warning' | 'info';
   displayMode: 'takeover' | 'banner' | 'both';
   highlightScreen: boolean;
+  screenHighlight?: boolean;
   active: boolean;
+  isActive?: boolean;
+  status?: string;
   createdAt: string;
 }
 
