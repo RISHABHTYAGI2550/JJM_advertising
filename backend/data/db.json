@@ -10,7 +10,7 @@
       "queueUrl": "https://hms.jjmhospitalkashipur.com/qd/DOC038",
       "status": "active",
       "connectionStatus": "offline",
-      "lastHeartbeat": "2026-09-19T05:51:44.967Z",
+      "lastHeartbeat": "2026-09-19T10:06:16.839Z",
       "currentContent": "queue",
       "currentCampaignId": null,
       "playlistId": "PL-DEFAULT",
@@ -21,7 +21,7 @@
         "model": "Hospital Smart TV"
       },
       "createdAt": "2026-09-19T05:51:44.967Z",
-      "isPaused": true
+      "isPaused": false
     }
   ],
   "pairingSessions": [
@@ -208,17 +208,33 @@
       "entityId": "EMERG-MU87WMHD",
       "details": "Started emergency broadcast: TEST EMERGENCY",
       "timestamp": "2026-09-19T10:01:29.042Z"
+    },
+    {
+      "id": "AUD-MU87YYQ6",
+      "action": "EMERGENCY_ANNOUNCEMENT_START",
+      "entity": "System",
+      "entityId": "EMERG-MU87YYQ5",
+      "details": "Started emergency broadcast: CODE RED EMERGENCY",
+      "timestamp": "2026-09-19T10:03:18.222Z"
+    },
+    {
+      "id": "AUD-MU882SJV",
+      "action": "TOGGLE_PAUSE_SCREEN",
+      "entity": "Screen",
+      "entityId": "SCR-DOC038-TV",
+      "details": "Screen playback RESUMED",
+      "timestamp": "2026-09-19T10:06:16.843Z"
     }
   ],
   "emergencyAnnouncement": {
-    "id": "EMERG-MU87WMHD",
-    "title": "TEST EMERGENCY",
-    "message": "Immediate attention required in ICU",
+    "id": "EMERG-MU87YYQ5",
+    "title": "CODE RED EMERGENCY",
+    "message": "All medical staff report to casualty ward immediately.",
     "severity": "critical",
     "displayMode": "takeover",
     "highlightScreen": true,
     "active": true,
-    "createdAt": "2026-09-19T10:01:29.041Z",
+    "createdAt": "2026-09-19T10:03:18.221Z",
     "isActive": true,
     "screenHighlight": true,
     "status": "active"

@@ -100,7 +100,7 @@ class SocketService {
         if (data != null && onPlaybackCommand != null) {
           try {
             final Map map = data is Map ? data : {};
-            if (map['screenId'] == null || map['screenId'] == _screenId) {
+            if (map['screenId'] == null || map['screenId'] == _currentScreenId) {
               final isPaused = map['isPaused'] == true;
               onPlaybackCommand!(isPaused);
             }
