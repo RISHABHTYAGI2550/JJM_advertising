@@ -1,0 +1,87 @@
+name: Build Android & iOS Release Artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'JJM_TV_player/**'
+
+jobs:
+  build-android:
+    name: Build Android APK & AAB
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.4'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: JJM_TV_player
+
+      - name: Build Android Release APK
+        run: flutter build apk --release
+        working-directory: JJM_TV_player
+
+      - name: Build Android Release AAB
+        run: flutter build appbundle --release
+        working-directory: JJM_TV_player
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: JJM-Hospital-TV-Release-APK
+          path: JJM_TV_player/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: JJM-Hospital-TV-Release-AAB
+          path: JJM_TV_player/build/app/outputs/bundle/release/app-release.aab
+
+  build-ios:
+    name: Build iOS Archive / IPA
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.4'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: JJM_TV_player
+
+      - name: Build iOS No Codesign
+        run: flutter build ios --release --no-codesign
+        working-directory: JJM_TV_player
+
+      - name: Package Payload to .ipa
+        run: |
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r JJM-Hospital-TV-Player-iOS.ipa Payload
+        working-directory: JJM_TV_player
+
+      - name: Upload iOS IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: JJM-Hospital-TV-iOS-IPA
+          path: JJM_TV_player/JJM-Hospital-TV-Player-iOS.ipa
