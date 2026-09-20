@@ -134,6 +134,54 @@ router.post('/pair', (req: Request, res: Response) => {
   }
 });
 
+// POST Bulk Pause / Resume All Screens Playback
+router.post('/pause-all', (req: Request, res: Response) => {
+  const { isPaused } = req.body;
+  const shouldPause = isPaused !== undefined ? !!isPaused : true;
+  const screens = db.getScreens();
+
+  screens.forEach((s) => {
+    db.updateScreen(s.id, { isPaused: shouldPause });
+    if (io) {
+      const config = resolverService.resolveScreenConfig(s.id);
+      io.to(`screen:${s.id}`).emit('config:update', { config });
+      io.to(`screen:${s.id}`).emit('command:playback', { isPaused: shouldPause });
+      io.emit('command:playback', { screenId: s.id, isPaused: shouldPause });
+    }
+  });
+
+  if (io) {
+    io.emit('screens:changed');
+  }
+
+  db.logAudit('TOGGLE_PAUSE_ALL', 'Screen', 'ALL', `All screens playback ${shouldPause ? 'PAUSED (Queue Only)' : 'RESUMED'}`);
+  return res.json({ success: true, isPaused: shouldPause, count: screens.length });
+});
+
+// POST Bulk Remote Power All Screens
+router.post('/power-all', (req: Request, res: Response) => {
+  const { state } = req.body;
+  const targetState: 'on' | 'off' = state === 'off' ? 'off' : 'on';
+  const screens = db.getScreens();
+
+  screens.forEach((s) => {
+    db.updateScreen(s.id, { powerState: targetState });
+    if (io) {
+      const config = resolverService.resolveScreenConfig(s.id);
+      io.to(`screen:${s.id}`).emit('command:power', { state: targetState, isPowerOn: targetState === 'on' });
+      io.emit('command:power', { screenId: s.id, state: targetState, isPowerOn: targetState === 'on' });
+      io.to(`screen:${s.id}`).emit('config:update', { config });
+    }
+  });
+
+  if (io) {
+    io.emit('screens:changed');
+  }
+
+  db.logAudit('REMOTE_POWER_ALL', 'Screen', 'ALL', `All screens power turned ${targetState.toUpperCase()}`);
+  return res.json({ success: true, powerState: targetState, count: screens.length });
+});
+
 // POST Unpair screen
 router.post('/:id/unpair', (req: Request, res: Response) => {
   const screen = pairingService.unpairScreen(req.params.id);
@@ -142,7 +190,8 @@ router.post('/:id/unpair', (req: Request, res: Response) => {
   }
 
   if (io) {
-    io.to(`screen:${screen.id}`).emit('screen:unpaired');
+    io.to(`screen:${screen.id}`).emit('screen:unpaired', { screenId: screen.id });
+    io.emit('screen:unpaired', { screenId: screen.id });
     io.emit('screens:changed');
   }
 
@@ -159,6 +208,7 @@ router.post('/:id/refresh', (req: Request, res: Response) => {
   if (io) {
     const config = resolverService.resolveScreenConfig(screen.id);
     io.to(`screen:${screen.id}`).emit('command:refresh', { config });
+    io.emit('command:refresh', { screenId: screen.id, config });
     db.logAudit('REMOTE_COMMAND', 'Screen', screen.id, 'Sent remote refresh command');
   }
 
@@ -203,8 +253,54 @@ router.post('/:id/toggle-pause', (req: Request, res: Response) => {
     io.emit('screens:changed');
   }
 
-  db.logAudit('TOGGLE_PAUSE_SCREEN', 'Screen', screen.id, `Screen playback ${newPaused ? 'PAUSED' : 'RESUMED'}`);
+  db.logAudit('TOGGLE_PAUSE_SCREEN', 'Screen', screen.id, `Screen playback ${newPaused ? 'PAUSED (Queue Only)' : 'RESUMED'}`);
   return res.json({ success: true, isPaused: newPaused, screen: updated });
+});
+
+// POST Remote Power On / Off (Standby Mode)
+router.post('/:id/power', (req: Request, res: Response) => {
+  const { state } = req.body;
+  const screen = db.getScreenById(req.params.id);
+  if (!screen) {
+    return res.status(404).json({ success: false, message: 'Screen not found' });
+  }
+
+  const newPowerState: 'on' | 'off' = state === 'off' ? 'off' : (state === 'on' ? 'on' : (screen.powerState === 'off' ? 'on' : 'off'));
+  const updated = db.updateScreen(screen.id, { powerState: newPowerState });
+
+  if (io) {
+    const config = resolverService.resolveScreenConfig(screen.id);
+    io.to(`screen:${screen.id}`).emit('command:power', { state: newPowerState, isPowerOn: newPowerState === 'on' });
+    io.to(`screen:${screen.id}`).emit('screen:power', { state: newPowerState, isPowerOn: newPowerState === 'on' });
+    io.emit('command:power', { screenId: screen.id, state: newPowerState, isPowerOn: newPowerState === 'on' });
+    io.emit('screen:power', { screenId: screen.id, state: newPowerState, isPowerOn: newPowerState === 'on' });
+    io.to(`screen:${screen.id}`).emit('config:update', { config });
+    io.emit('config:update', { screenId: screen.id, config });
+    io.emit('screens:changed');
+  }
+
+  db.logAudit('REMOTE_POWER', 'Screen', screen.id, `Screen power turned ${newPowerState.toUpperCase()}`);
+  return res.json({ success: true, powerState: newPowerState, screen: updated });
+});
+
+// POST Request Real Snapshot from Screen
+router.post('/:id/request-snapshot', (req: Request, res: Response) => {
+  const screen = db.getScreenById(req.params.id);
+  if (!screen) {
+    return res.status(404).json({ success: false, message: 'Screen not found' });
+  }
+
+  if (io) {
+    io.to(`screen:${screen.id}`).emit('command:request_snapshot', { screenId: screen.id });
+    io.emit('command:request_snapshot', { screenId: screen.id });
+  }
+
+  return res.json({
+    success: true,
+    message: 'Snapshot requested from screen',
+    latestSnapshot: screen.latestSnapshot,
+    latestSnapshotTime: screen.latestSnapshotTime,
+  });
 });
 
 export default router;

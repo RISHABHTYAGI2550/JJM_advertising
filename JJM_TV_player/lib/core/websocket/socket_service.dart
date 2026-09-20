@@ -16,6 +16,8 @@ class SocketService {
   static Function()? onUnpaired;
   static Function(bool isConnected)? onConnectionChanged;
   static Function(bool isPaused)? onPlaybackCommand;
+  static Function(bool isPowerOn)? onPowerCommand;
+  static Function()? onRequestSnapshot;
   static Function(Map<String, dynamic>? announcement)? onEmergencyUpdate;
 
   static Future<void> init({
@@ -91,9 +93,36 @@ class SocketService {
       });
 
       // Listen for unpair/revoke
-      _socket!.on('screen:unpaired', (_) {
-        onUnpaired?.call();
-      });
+      void handleUnpair(dynamic data) {
+        try {
+          if (data == null) {
+            onUnpaired?.call();
+            return;
+          }
+          final Map map = data is Map ? data : {};
+          if (map['screenId'] == null || map['screenId'] == _currentScreenId) {
+            onUnpaired?.call();
+          }
+        } catch (_) {
+          onUnpaired?.call();
+        }
+      }
+      _socket!.on('screen:unpaired', handleUnpair);
+
+      // Listen for remote power (Standby on / off) command
+      void handlePower(dynamic data) {
+        if (onPowerCommand != null && data != null) {
+          try {
+            final Map map = data is Map ? data : {};
+            if (map['screenId'] == null || map['screenId'] == _currentScreenId) {
+              final isPowerOn = map['isPowerOn'] == true || map['state'] == 'on';
+              onPowerCommand!(isPowerOn);
+            }
+          } catch (_) {}
+        }
+      }
+      _socket!.on('command:power', handlePower);
+      _socket!.on('screen:power', handlePower);
 
       // Listen for real-time play/pause playback command
       void handlePlayback(dynamic data) {
@@ -110,6 +139,21 @@ class SocketService {
 
       _socket!.on('command:playback', handlePlayback);
       _socket!.on('screen:playback', handlePlayback);
+
+      // Listen for snapshot capture request from admin CCTV preview
+      void handleSnapshotRequest(dynamic data) {
+        if (onRequestSnapshot != null) {
+          try {
+            final Map map = data is Map ? data : {};
+            if (map['screenId'] == null || map['screenId'] == _currentScreenId) {
+              onRequestSnapshot!();
+            }
+          } catch (_) {
+            onRequestSnapshot!();
+          }
+        }
+      }
+      _socket!.on('command:request_snapshot', handleSnapshotRequest);
 
       // Listen for emergency announcements
       void handleEmergency(dynamic data) {
@@ -161,6 +205,15 @@ class SocketService {
         });
       }
     });
+  }
+
+  static void sendSnapshot(String base64Image) {
+    if (_socket != null && _socket!.connected && _currentScreenId != null) {
+      _socket!.emit('screen:snapshot', {
+        'screenId': _currentScreenId,
+        'image': base64Image,
+      });
+    }
   }
 
   static void disconnect() {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, RefreshCw, Send, Trash2, ExternalLink, Tv, Play, Pause } from 'lucide-react';
+import { X, RefreshCw, Send, Trash2, ExternalLink, Tv, Play, Pause, Power } from 'lucide-react';
 import { Screen, Department } from '../types';
 import { api } from '../services/api';
 
@@ -95,11 +95,28 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
     try {
       const res = await api.post(`/screens/${screen.id}/toggle-pause`);
       if (res.data.success) {
-        setFeedback(`TV playback ${res.data.isPaused ? 'PAUSED' : 'RESUMED'} in real time!`);
+        setFeedback(`TV playback ${res.data.isPaused ? 'PAUSED (Queue Only)' : 'RESUMED'} in real time!`);
         onRefreshList();
       }
     } catch (err: any) {
       setFeedback(`Error toggling playback: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTogglePower = async () => {
+    if (!screen) return;
+    setLoading(true);
+    try {
+      const next = screen.powerState === 'off' ? 'on' : 'off';
+      const res = await api.post(`/screens/${screen.id}/power`, { state: next });
+      if (res.data.success) {
+        setFeedback(`TV screen display turned ${res.data.powerState === 'off' ? 'OFF (Standby)' : 'ON (Active)'}!`);
+        onRefreshList();
+      }
+    } catch (err: any) {
+      setFeedback(`Error toggling power: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -232,7 +249,17 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
               ) : (
                 <Pause size={13} fill="currentColor" />
               )}
-              <span>{screen.isPaused ? 'Resume TV' : 'Pause TV'}</span>
+              <span>{screen.isPaused ? 'Resume Ads' : 'Pause Ads (Queue Only)'}</span>
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={handleTogglePower}
+              disabled={loading}
+              title={screen.powerState === 'off' ? 'Wake screen display' : 'Turn screen display OFF (Standby)'}
+              style={{ color: screen.powerState === 'off' ? '#10B981' : '#64748B' }}
+            >
+              <Power size={13} />
+              <span>{screen.powerState === 'off' ? 'Wake TV' : 'Screen OFF'}</span>
             </button>
             <button className="btn btn-secondary btn-sm" onClick={handleRemoteRefresh}>
               <RefreshCw size={13} /> Refresh TV

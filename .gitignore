@@ -24,6 +24,7 @@ JJM_TV_player/.flutter-plugins-dependencies
 *.aab
 *.ipa
 .gradle/
+.kotlin/
 local.properties
 **/android/app/debug/
 **/android/app/profile/

@@ -29,6 +29,9 @@ export interface Screen {
   deviceToken: string | null;
   playerVersion: string;
   isPaused?: boolean;
+  powerState?: 'on' | 'off';
+  latestSnapshot?: string;
+  latestSnapshotTime?: string;
   deviceMetadata?: {
     platform?: string;
     model?: string;
@@ -121,6 +124,8 @@ export interface EmergencyAnnouncement {
   active: boolean;
   isActive?: boolean;
   status?: string;
+  durationSeconds?: number;
+  expiresAt?: number;
   createdAt: string;
 }
 
@@ -144,6 +149,7 @@ export interface ResolvedDisplayConfig {
     offlineMediaCached: boolean;
     announcementTicker?: string;
     isPaused?: boolean;
+    powerState?: 'on' | 'off';
     emergencyAnnouncement?: EmergencyAnnouncement | null;
   };
   resolvedAt: string;

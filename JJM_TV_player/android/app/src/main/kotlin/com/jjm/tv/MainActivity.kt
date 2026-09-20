@@ -1,4 +1,4 @@
-package com.example.jjm_tv
+package com.jjm.tv
 
 import io.flutter.embedding.android.FlutterActivity
 

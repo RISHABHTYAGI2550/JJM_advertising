@@ -15,6 +15,10 @@ import {
   Megaphone,
   Play,
   Pause,
+  Power,
+  Trash2,
+  Camera,
+  Loader2,
 } from 'lucide-react';
 import { Screen, Department, Campaign, Playlist, MediaItem } from '../types';
 import { api } from '../services/api';
@@ -45,6 +49,9 @@ export const LiveFeeds: React.FC<LiveFeedsProps> = ({
   const [currentTime, setCurrentTime] = useState(new Date());
   const [fullscreenFeed, setFullscreenFeed] = useState<Screen | null>(null);
   const [simulatedTick, setSimulatedTick] = useState<number>(0);
+  const [previewMode, setPreviewMode] = useState<'queue' | 'snapshot'>('queue');
+  const [requestingSnapshot, setRequestingSnapshot] = useState(false);
+  const [actioningId, setActioningId] = useState<string | null>(null);
 
   // Update clock every second
   useEffect(() => {
@@ -164,11 +171,68 @@ export const LiveFeeds: React.FC<LiveFeedsProps> = ({
   };
 
   const handleToggleScreenPause = async (screenId: string) => {
+    setActioningId(screenId);
     try {
-      await api.post(`/screens/${screenId}/toggle-pause`);
+      const res = await api.post(`/screens/${screenId}/toggle-pause`);
+      if (res.data.screen && fullscreenFeed?.id === screenId) {
+        setFullscreenFeed(res.data.screen);
+      }
       onRefresh();
     } catch (err: any) {
       alert(`Failed to toggle screen playback: ${err.message}`);
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const handleToggleScreenPower = async (screen: Screen) => {
+    setActioningId(screen.id);
+    try {
+      const nextState = screen.powerState === 'off' ? 'on' : 'off';
+      const res = await api.post(`/screens/${screen.id}/power`, { state: nextState });
+      if (res.data.screen && fullscreenFeed?.id === screen.id) {
+        setFullscreenFeed(res.data.screen);
+      }
+      onRefresh();
+    } catch (err: any) {
+      alert(`Failed to change power state: ${err.message}`);
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const handleRequestSnapshot = async (screenId: string) => {
+    setRequestingSnapshot(true);
+    try {
+      const res = await api.post(`/screens/${screenId}/request-snapshot`);
+      if (res.data.latestSnapshot && fullscreenFeed?.id === screenId) {
+        setFullscreenFeed({ ...fullscreenFeed, latestSnapshot: res.data.latestSnapshot });
+      }
+      onRefresh();
+    } catch (err: any) {
+      alert(`Failed to request snapshot: ${err.message}`);
+    } finally {
+      setTimeout(() => setRequestingSnapshot(false), 1200);
+    }
+  };
+
+  const handleUnpairScreen = async (screen: Screen) => {
+    if (
+      !confirm(
+        `Are you sure you want to unpair "${screen.name}"?\n\nThe TV will return to the pairing code screen.`
+      )
+    ) {
+      return;
+    }
+    setActioningId(screen.id);
+    try {
+      await api.post(`/screens/${screen.id}/unpair`);
+      setFullscreenFeed(null);
+      onRefresh();
+    } catch (err: any) {
+      alert(`Failed to unpair screen: ${err.message}`);
+    } finally {
+      setActioningId(null);
     }
   };
 
@@ -732,6 +796,7 @@ export const LiveFeeds: React.FC<LiveFeedsProps> = ({
             }}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Modal Header */}
             <div
               style={{
                 padding: '14px 20px',
@@ -741,30 +806,74 @@ export const LiveFeeds: React.FC<LiveFeedsProps> = ({
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 color: '#ffffff',
+                flexWrap: 'wrap',
+                gap: '10px',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span className="pulse-rec-dot" />
-                <h4 style={{ fontSize: '1rem', fontWeight: 800 }}>
-                  LIVE MONITOR: {fullscreenFeed.name.toUpperCase()} ({fullscreenFeed.code})
+                <h4 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>
+                  LIVE CCTV MONITOR: {fullscreenFeed.name.toUpperCase()} ({fullscreenFeed.code})
                 </h4>
               </div>
-              <button
-                onClick={() => setFullscreenFeed(null)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#d8b4fe',
-                  fontSize: '1rem',
-                  cursor: 'pointer',
-                  fontWeight: 700,
-                }}
-              >
-                ✕ CLOSE
-              </button>
+
+              {/* View Switcher Tabs */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', backgroundColor: '#0D0815', borderRadius: '8px', padding: '3px', border: '1px solid #2a1b40' }}>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewMode('queue')}
+                    style={{
+                      padding: '4px 12px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor: previewMode === 'queue' ? 'var(--primary)' : 'transparent',
+                      color: previewMode === 'queue' ? '#ffffff' : '#a78bfa',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    🖥️ Doctor Queue Web Feed
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewMode('snapshot')}
+                    style={{
+                      padding: '4px 12px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor: previewMode === 'snapshot' ? 'var(--primary)' : 'transparent',
+                      color: previewMode === 'snapshot' ? '#ffffff' : '#a78bfa',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    📸 Real TV Screen Snapshot
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setFullscreenFeed(null)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#d8b4fe',
+                    fontSize: '1rem',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    padding: '4px 8px',
+                  }}
+                >
+                  ✕ CLOSE
+                </button>
+              </div>
             </div>
 
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Modal Body */}
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Screen Container 16:9 Aspect Ratio */}
               <div
                 style={{
                   position: 'relative',
@@ -774,52 +883,212 @@ export const LiveFeeds: React.FC<LiveFeedsProps> = ({
                   overflow: 'hidden',
                   background: '#000000',
                   boxShadow: '0 10px 40px rgba(0,0,0,0.8)',
+                  border: '1px solid #2a1b40',
                 }}
               >
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background:
-                      'radial-gradient(circle at center, #26163a 0%, #0d0815 100%)',
-                  }}
-                >
-                  <div style={{ textAlign: 'center', color: '#ffffff' }}>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#34d399' }}>
-                      NOW CALLING TOKEN #48
-                    </div>
-                    <div style={{ fontSize: '0.9rem', color: '#c4b5fd', marginTop: '6px' }}>
-                      Dr. Consultation OPD • Room 102
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '12px' }}>
-                      URL: {fullscreenFeed.queueUrl}
-                    </div>
+                {previewMode === 'queue' ? (
+                  // Live Doctor Queue Webview Iframe
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+                    <iframe
+                      src={fullscreenFeed.queueUrl}
+                      title={fullscreenFeed.name}
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        border: 'none',
+                        backgroundColor: '#0F172A',
+                      }}
+                      allow="autoplay"
+                    />
                   </div>
+                ) : (
+                  // Real TV Screen Snapshot
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: '#070D1E',
+                    }}
+                  >
+                    {fullscreenFeed.latestSnapshot ? (
+                      <img
+                        src={fullscreenFeed.latestSnapshot}
+                        alt="Live TV Screen Snapshot"
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
+                    ) : (
+                      <div style={{ textAlign: 'center', color: '#94A3B8', padding: '20px' }}>
+                        <Camera size={44} color="#6B3A8A" style={{ margin: '0 auto 10px', opacity: 0.7 }} />
+                        <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#FFFFFF' }}>
+                          No TV Screenshot Received Yet
+                        </h4>
+                        <p style={{ fontSize: '0.775rem', marginTop: '4px', maxWidth: '360px', margin: '4px auto 14px' }}>
+                          Click below to request the running TV player to capture its current frame and send it live over WebSocket.
+                        </p>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => handleRequestSnapshot(fullscreenFeed.id)}
+                          disabled={requestingSnapshot}
+                        >
+                          {requestingSnapshot ? <Loader2 size={13} className="spin" /> : <Camera size={13} />}
+                          <span>{requestingSnapshot ? 'Capturing...' : 'Capture TV Screenshot Now'}</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Status and Telemetry Bar */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  backgroundColor: '#161021',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid #271e36',
+                  fontSize: '0.75rem',
+                  color: '#CBD5E1',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className={`status-badge ${fullscreenFeed.connectionStatus}`}>
+                    <span className={fullscreenFeed.connectionStatus === 'online' ? 'pulse-dot-online' : 'pulse-dot-offline'} />
+                    {fullscreenFeed.connectionStatus.toUpperCase()}
+                  </span>
+
+                  {fullscreenFeed.powerState === 'off' ? (
+                    <span style={{ padding: '2px 8px', borderRadius: '10px', backgroundColor: '#334155', color: '#FFFFFF', fontWeight: 800, fontSize: '0.675rem' }}>
+                      DISPLAY STANDBY
+                    </span>
+                  ) : (
+                    <span style={{ padding: '2px 8px', borderRadius: '10px', backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#34D399', fontWeight: 800, fontSize: '0.675rem' }}>
+                      DISPLAY ACTIVE
+                    </span>
+                  )}
+
+                  {fullscreenFeed.isPaused ? (
+                    <span style={{ padding: '2px 8px', borderRadius: '10px', backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#F87171', fontWeight: 800, fontSize: '0.675rem' }}>
+                      QUEUE ONLY MODE (ADS PAUSED)
+                    </span>
+                  ) : (
+                    <span style={{ padding: '2px 8px', borderRadius: '10px', backgroundColor: 'rgba(107, 58, 138, 0.3)', color: '#D8B4FE', fontWeight: 800, fontSize: '0.675rem' }}>
+                      ROTATING ADS ACTIVE
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#94A3B8' }}>
+                  <span>Location: <strong style={{ color: '#F8FAFC' }}>{fullscreenFeed.location}</strong></span>
+                  <span>URL: <a href={fullscreenFeed.queueUrl} target="_blank" rel="noreferrer" style={{ color: '#38BDF8', textDecoration: 'none' }}>Open Tab ↗</a></span>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    onSelectScreen(fullscreenFeed);
-                    setFullscreenFeed(null);
-                  }}
-                >
-                  Open Screen Settings
-                </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => {
-                    handleForceQueue(fullscreenFeed.id);
-                    setFullscreenFeed(null);
-                  }}
-                >
-                  Force Display Refresh
-                </button>
+              {/* Complete Remote Control Buttons Toolbar */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  borderTop: '1px solid #271e36',
+                  paddingTop: '12px',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                }}
+              >
+                {/* Left controls */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {/* Play/Pause Ads */}
+                  <button
+                    className={`btn btn-sm ${fullscreenFeed.isPaused ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => handleToggleScreenPause(fullscreenFeed.id)}
+                    disabled={actioningId === fullscreenFeed.id}
+                    title={fullscreenFeed.isPaused ? 'Resume advertisement rotation' : 'Stop ads and show only doctor queue'}
+                    style={
+                      fullscreenFeed.isPaused
+                        ? { backgroundColor: '#10B981', borderColor: '#10B981', color: '#FFFFFF' }
+                        : { color: '#34D399', borderColor: 'rgba(16, 185, 129, 0.4)' }
+                    }
+                  >
+                    {actioningId === fullscreenFeed.id ? (
+                      <Loader2 size={13} className="spin" />
+                    ) : fullscreenFeed.isPaused ? (
+                      <Play size={13} fill="currentColor" />
+                    ) : (
+                      <Pause size={13} fill="currentColor" />
+                    )}
+                    <span>{fullscreenFeed.isPaused ? 'Resume Ads' : 'Pause Ads (Queue Only)'}</span>
+                  </button>
+
+                  {/* Remote Power On / Off */}
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => handleToggleScreenPower(fullscreenFeed)}
+                    disabled={actioningId === fullscreenFeed.id}
+                    title={fullscreenFeed.powerState === 'off' ? 'Wake screen display' : 'Turn screen display OFF (Standby)'}
+                    style={{ color: fullscreenFeed.powerState === 'off' ? '#10B981' : '#94A3B8' }}
+                  >
+                    <Power size={13} />
+                    <span>{fullscreenFeed.powerState === 'off' ? 'Wake TV (Turn ON)' : 'Turn Screen OFF (Standby)'}</span>
+                  </button>
+
+                  {/* Snapshot Request */}
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      setPreviewMode('snapshot');
+                      handleRequestSnapshot(fullscreenFeed.id);
+                    }}
+                    disabled={requestingSnapshot}
+                    title="Capture live screenshot from TV kiosk"
+                  >
+                    {requestingSnapshot ? <Loader2 size={13} className="spin" /> : <Camera size={13} />}
+                    <span>{requestingSnapshot ? 'Capturing...' : 'Capture Snapshot'}</span>
+                  </button>
+
+                  {/* Refresh */}
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => handleForceQueue(fullscreenFeed.id)}
+                    title="Force refresh display"
+                  >
+                    <RefreshCw size={13} />
+                    <span>Refresh Display</span>
+                  </button>
+                </div>
+
+                {/* Right controls */}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => {
+                      onSelectScreen(fullscreenFeed);
+                      setFullscreenFeed(null);
+                    }}
+                  >
+                    <Eye size={13} />
+                    <span>Screen Settings</span>
+                  </button>
+
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={() => handleUnpairScreen(fullscreenFeed)}
+                    disabled={actioningId === fullscreenFeed.id}
+                    title="Unpair TV and disconnect"
+                  >
+                    <Trash2 size={13} />
+                    <span>Unpair TV</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>

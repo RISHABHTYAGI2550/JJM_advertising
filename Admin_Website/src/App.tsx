@@ -198,6 +198,7 @@ export const App: React.FC = () => {
               onOpenPairModal={() => setIsPairModalOpen(true)}
               onOpenGlobalModal={() => setIsGlobalModalOpen(true)}
               onNavigateToLiveFeeds={() => setActiveTab('live-feeds')}
+              onRefresh={fetchData}
             />
           )}
 

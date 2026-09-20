@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -29,6 +32,8 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
   int _currentIndex = 0;
   Timer? _itemTimer;
   Timer? _pollTimer;
+  Timer? _snapshotTimer;
+  Timer? _emergencyAutoDismissTimer;
   String _serverBaseUrl = '';
 
   // Controllers
@@ -37,8 +42,12 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
   String? _loadedQueueUrl;
 
   bool _isShowingAd = false;
+  bool _isPowerOff = false;
   String? _testMessage;
   Timer? _testMessageTimer;
+
+  // Global key for real-time CCTV snapshot capture
+  final GlobalKey _previewContainerKey = GlobalKey();
 
   // Pulse animation controller for emergency highlights
   late AnimationController _pulseController;
@@ -48,6 +57,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
   void initState() {
     super.initState();
     _config = widget.initialConfig;
+    _isPowerOff = _config?.settings['powerState'] == 'off';
 
     _pulseController = AnimationController(
       vsync: this,
@@ -65,6 +75,8 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
   void dispose() {
     _itemTimer?.cancel();
     _pollTimer?.cancel();
+    _snapshotTimer?.cancel();
+    _emergencyAutoDismissTimer?.cancel();
     _testMessageTimer?.cancel();
     _videoController?.dispose();
     _pulseController.dispose();
@@ -93,6 +105,22 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
     return url;
   }
 
+  /// Captures the current TV screen widget and sends base64 image over WebSocket
+  Future<void> _captureAndSendSnapshot() async {
+    try {
+      final boundary = _previewContainerKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary != null) {
+        final image = await boundary.toImage(pixelRatio: 0.5);
+        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData != null) {
+          final bytes = byteData.buffer.asUint8List();
+          final base64String = 'data:image/png;base64,${base64Encode(bytes)}';
+          SocketService.sendSnapshot(base64String);
+        }
+      }
+    } catch (_) {}
+  }
+
   Future<void> _initEngine() async {
     // 0. Cache base server URL for media resolution
     _serverBaseUrl = await ApiService.getBaseUrl();
@@ -101,6 +129,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
     _config ??= await ApiService.fetchDisplayConfig(widget.screenId);
 
     if (_config != null) {
+      _isPowerOff = _config!.settings['powerState'] == 'off';
       _setupWebView(_config!.queueUrl);
     }
 
@@ -115,9 +144,14 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
       if (mounted) {
         final wasPaused = _config?.settings['isPaused'] == true;
         final isNowPaused = newConfig.settings['isPaused'] == true;
+        final isNowPowerOff = newConfig.settings['powerState'] == 'off';
 
         setState(() {
           _config = newConfig;
+          _isPowerOff = isNowPowerOff;
+          if (isNowPaused || isNowPowerOff) {
+            _isShowingAd = false;
+          }
         });
 
         // Check if queue URL changed
@@ -125,43 +159,99 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
           _setupWebView(newConfig.queueUrl);
         }
 
-        // Handle pause state transitions
-        if (isNowPaused) {
+        // Handle pause / power state transitions
+        if (isNowPaused || isNowPowerOff) {
           _videoController?.pause();
+          _videoController?.dispose();
+          _videoController = null;
           _itemTimer?.cancel();
+          SocketService.updateCurrentContent('queue');
         } else if (wasPaused && !isNowPaused) {
-          _videoController?.play();
           _startPlayback();
         }
       }
     };
 
-    // Instant real-time playback pause / resume
+    // Instant real-time playback pause / resume (Queue-Only vs Rotating Ads)
     SocketService.onPlaybackCommand = (bool isPaused) {
       if (mounted) {
         setState(() {
           if (_config != null) {
             _config!.settings['isPaused'] = isPaused;
           }
+          if (isPaused) {
+            _isShowingAd = false;
+          }
         });
         if (isPaused) {
           _videoController?.pause();
+          _videoController?.dispose();
+          _videoController = null;
           _itemTimer?.cancel();
+          SocketService.updateCurrentContent('queue');
         } else {
-          _videoController?.play();
           _startPlayback();
         }
       }
     };
 
-    // Instant real-time emergency announcement push / dismiss
+    // Instant real-time remote power (Standby on / off)
+    SocketService.onPowerCommand = (bool isPowerOn) {
+      if (mounted) {
+        setState(() {
+          _isPowerOff = !isPowerOn;
+          if (_config != null) {
+            _config!.settings['powerState'] = isPowerOn ? 'on' : 'off';
+          }
+          if (!isPowerOn) {
+            _isShowingAd = false;
+          }
+        });
+        if (!isPowerOn) {
+          _videoController?.pause();
+          _videoController?.dispose();
+          _videoController = null;
+          _itemTimer?.cancel();
+        } else {
+          _startPlayback();
+        }
+      }
+    };
+
+    // Snapshot on-demand trigger
+    SocketService.onRequestSnapshot = () {
+      _captureAndSendSnapshot();
+    };
+
+    // Instant real-time emergency announcement push / dismiss with auto-dismiss duration
     SocketService.onEmergencyUpdate = (Map<String, dynamic>? announcement) {
+      _emergencyAutoDismissTimer?.cancel();
+      _emergencyAutoDismissTimer = null;
+
       if (mounted) {
         setState(() {
           if (_config != null) {
             _config!.settings['emergencyAnnouncement'] = announcement;
           }
         });
+
+        if (announcement != null) {
+          final durationVal = announcement['durationSeconds'] ?? announcement['duration'];
+          if (durationVal != null) {
+            final sec = int.tryParse(durationVal.toString()) ?? 0;
+            if (sec > 0) {
+              _emergencyAutoDismissTimer = Timer(Duration(seconds: sec), () {
+                if (mounted) {
+                  setState(() {
+                    if (_config != null) {
+                      _config!.settings['emergencyAnnouncement'] = null;
+                    }
+                  });
+                }
+              });
+            }
+          }
+        }
       }
     };
 
@@ -186,7 +276,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
       }
     };
 
-    // 3. Fallback periodic config polling (every 60s)
+    // 3. Periodic fallback polling (every 60s)
     _pollTimer = Timer.periodic(const Duration(seconds: 60), (_) async {
       final updated = await ApiService.fetchDisplayConfig(widget.screenId);
       if (updated != null && mounted) {
@@ -194,7 +284,12 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
       }
     });
 
-    // 4. Start Playlist loop
+    // 4. Periodic lightweight CCTV snapshot emission (every 30s)
+    _snapshotTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _captureAndSendSnapshot();
+    });
+
+    // 5. Start Playlist loop
     _startPlayback();
   }
 
@@ -233,6 +328,13 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
     }
 
     final isPaused = _config?.settings['isPaused'] == true;
+    if (isPaused || _isPowerOff) {
+      setState(() {
+        _isShowingAd = false;
+      });
+      SocketService.updateCurrentContent('queue');
+      return;
+    }
 
     final currentItem = _config!.playlist[_currentIndex];
     final durationSeconds = currentItem.duration > 0 ? currentItem.duration : 15;
@@ -253,8 +355,8 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
       }
     }
 
-    // Only set timer to advance if NOT paused and there is more than 1 item
-    if (!isPaused && _config!.playlist.length > 1) {
+    // Only set timer to advance if NOT paused and NOT in standby and there is more than 1 item
+    if (!isPaused && !_isPowerOff && _config!.playlist.length > 1) {
       _itemTimer = Timer(Duration(seconds: durationSeconds), () {
         _nextItem();
       });
@@ -322,105 +424,148 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B1329),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // LAYER 1: The Live Doctor Queue Display (Always alive in background)
-          if (!kIsWeb && _webViewController != null)
-            WebViewWidget(controller: _webViewController!)
-          else
-            _buildWebFallbackQueue(),
+      body: RepaintBoundary(
+        key: _previewContainerKey,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // LAYER 1: The Live Doctor Queue Display (Always alive in background)
+            if (!kIsWeb && _webViewController != null)
+              WebViewWidget(controller: _webViewController!)
+            else
+              _buildWebFallbackQueue(),
 
-          // LAYER 2: Advertisement Layer (Smooth fade overlay on top of queue)
-          // Responsive on phones, tablets, laptops, and TV screens without cut-offs
-          AnimatedOpacity(
-            opacity: (_isShowingAd && (!isEmergencyActive || emergencyMode == 'banner')) ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 600),
-            child: IgnorePointer(
-              ignoring: !_isShowingAd || (isEmergencyActive && emergencyMode == 'takeover'),
-              child: _buildAdOverlay(currentItem, mediaUrl),
-            ),
-          ),
-
-          // LAYER 3: Emergency Announcement Layer
-          if (isEmergencyActive)
-            (emergencyMode == 'takeover' || emergencyMode == 'both')
-                ? _buildEmergencyTakeover(emergency)
-                : _buildEmergencyBanner(emergency)
-          else if (_config?.announcementTicker != null)
-            _buildLegacyTicker(_config!.announcementTicker!),
-
-          // LAYER 4: Paused Indicator Pill
-          if (isPaused)
-            Positioned(
-              top: 18,
-              right: 20,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE11D48).withValues(alpha: 0.92),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.45),
-                      blurRadius: 12,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.pause_circle_filled_rounded, color: Colors.white, size: 16),
-                    SizedBox(width: 7),
-                    Text(
-                      "PLAYBACK PAUSED",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ],
-                ),
+            // LAYER 2: Advertisement Layer (Smooth fade overlay on top of queue)
+            // Fully hidden if ads are paused (showing only queue) or display is powered off
+            AnimatedOpacity(
+              opacity: (_isShowingAd && !isPaused && !_isPowerOff && (!isEmergencyActive || emergencyMode == 'banner')) ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 600),
+              child: IgnorePointer(
+                ignoring: !_isShowingAd || isPaused || _isPowerOff || (isEmergencyActive && emergencyMode == 'takeover'),
+                child: _buildAdOverlay(currentItem, mediaUrl),
               ),
             ),
 
-          // LAYER 5: Remote Test Notification Banner
-          if (_testMessage != null)
-            Positioned(
-              top: 20,
-              left: 30,
-              right: 30,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0284C7),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      blurRadius: 15,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline, color: Colors.white),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _testMessage!,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            // LAYER 3: Emergency Announcement Layer
+            if (isEmergencyActive && !_isPowerOff)
+              (emergencyMode == 'takeover' || emergencyMode == 'both')
+                  ? _buildEmergencyTakeover(emergency)
+                  : _buildEmergencyBanner(emergency)
+            else if (_config?.announcementTicker != null && !_isPowerOff)
+              _buildLegacyTicker(_config!.announcementTicker!),
+
+            // LAYER 4: Paused Ads (Queue-Only Mode) Indicator Pill
+            if (isPaused && !_isPowerOff)
+              Positioned(
+                top: 18,
+                right: 20,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.90),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.45),
+                        blurRadius: 12,
+                        offset: const Offset(0, 3),
                       ),
-                    ),
-                  ],
+                    ],
+                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.6), width: 1.5),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF10B981),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        "ADS PAUSED • QUEUE ONLY",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-        ],
+
+            // LAYER 5: Remote Test Notification Banner
+            if (_testMessage != null && !_isPowerOff)
+              Positioned(
+                top: 20,
+                left: 30,
+                right: 30,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0284C7),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        blurRadius: 15,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: Colors.white),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _testMessage!,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // LAYER 6: Deep Sleep / Remote Screen OFF (Standby Mode)
+            if (_isPowerOff)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black,
+                  alignment: Alignment.center,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.power_settings_new, color: Colors.white.withValues(alpha: 0.08), size: 52),
+                      const SizedBox(height: 12),
+                      Text(
+                        "TV DISPLAY STANDBY",
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 2.0,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        "Screen turned off remotely • Ready for Wake",
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

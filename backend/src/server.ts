@@ -93,6 +93,22 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Real TV screenshot snapshot received
+  socket.on('screen:snapshot', ({ screenId, image }) => {
+    if (screenId && image) {
+      const now = new Date().toISOString();
+      db.updateScreen(screenId, {
+        latestSnapshot: image,
+        latestSnapshotTime: now,
+      });
+      io.emit('screen:snapshot_updated', {
+        screenId,
+        latestSnapshot: image,
+        latestSnapshotTime: now,
+      });
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log(`[Socket.IO] Client disconnected: ${socket.id}`);
   });

@@ -70,6 +70,42 @@ export class ResolverService {
     candidates.sort((a, b) => b.effectivePriority - a.effectivePriority);
 
     const winningCampaign = candidates[0];
+    const isScreenPaused = !!screen.isPaused;
+
+    // If playback/ads are paused, override to ONLY display the Doctor HMS queue
+    if (isScreenPaused) {
+      const emergency = db.getEmergencyAnnouncement();
+      return {
+        screenId: screen.id,
+        screenName: screen.name,
+        departmentId: screen.departmentId,
+        departmentName,
+        queueUrl,
+        activeCampaign: null,
+        playlist: [
+          { id: 'item-pause-queue', type: 'queue', title: 'Doctor Live Token Queue', duration: 9999, order: 1 },
+        ],
+        settings: {
+          transition: 'fade',
+          heartbeatSeconds: 20,
+          offlineMediaCached: true,
+          isPaused: true,
+          powerState: screen.powerState || 'on',
+          emergencyAnnouncement:
+            emergency && (emergency.active || (emergency as any).isActive)
+              ? {
+                  ...emergency,
+                  active: true,
+                  isActive: true,
+                  status: 'active',
+                  highlightScreen: (emergency as any).highlightScreen !== false,
+                  screenHighlight: (emergency as any).highlightScreen !== false,
+                }
+              : null,
+        },
+        resolvedAt: new Date().toISOString(),
+      };
+    }
 
     if (winningCampaign) {
       return this.buildConfigFromCampaign(screen, departmentName, queueUrl, winningCampaign, 'fade');
@@ -105,6 +141,7 @@ export class ResolverService {
         heartbeatSeconds: 20,
         offlineMediaCached: true,
         isPaused: !!screen.isPaused,
+        powerState: screen.powerState || 'on',
         emergencyAnnouncement:
           emergency && (emergency.active || (emergency as any).isActive)
             ? {
@@ -199,6 +236,7 @@ export class ResolverService {
         heartbeatSeconds: 20,
         offlineMediaCached: true,
         isPaused: !!screen.isPaused,
+        powerState: screen.powerState || 'on',
         emergencyAnnouncement:
           emergency && (emergency.active || (emergency as any).isActive)
             ? {

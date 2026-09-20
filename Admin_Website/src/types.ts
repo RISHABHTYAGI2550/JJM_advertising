@@ -27,6 +27,9 @@ export interface Screen {
   deviceToken: string | null;
   playerVersion: string;
   isPaused?: boolean;
+  powerState?: 'on' | 'off';
+  latestSnapshot?: string;
+  latestSnapshotTime?: string;
   deviceMetadata?: {
     platform?: string;
     model?: string;
@@ -96,6 +99,8 @@ export interface EmergencyAnnouncement {
   displayMode: 'takeover' | 'banner' | 'both';
   highlightScreen: boolean;
   active: boolean;
+  durationSeconds?: number;
+  expiresAt?: number;
   createdAt: string;
 }
 

@@ -12,6 +12,11 @@ import {
   CheckCircle2,
   AlertTriangle,
   Pause,
+  Play,
+  Power,
+  Trash2,
+  Loader2,
+  Edit2,
 } from 'lucide-react';
 import { Screen, Department, MediaItem, Campaign } from '../types';
 import { api } from '../services/api';
@@ -25,6 +30,7 @@ interface DashboardProps {
   onOpenPairModal: () => void;
   onOpenGlobalModal: () => void;
   onNavigateToLiveFeeds?: () => void;
+  onRefresh?: () => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -36,7 +42,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onOpenPairModal,
   onOpenGlobalModal,
   onNavigateToLiveFeeds,
+  onRefresh,
 }) => {
+  const [actioningId, setActioningId] = useState<string | null>(null);
   const onlineCount = screens.filter((s) => s.connectionStatus === 'online').length;
   const offlineCount = screens.length - onlineCount;
   const activeCampaignsCount = campaigns.filter((c) => c.status === 'active').length;
@@ -67,6 +75,53 @@ export const Dashboard: React.FC<DashboardProps> = ({
       setBroadcastFeedback(`Broadcast failed: ${err.message}`);
     } finally {
       setBroadcasting(false);
+    }
+  };
+
+  const handleTogglePause = async (screenId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActioningId(screenId);
+    try {
+      await api.post(`/screens/${screenId}/toggle-pause`);
+      onRefresh?.();
+    } catch (err: any) {
+      alert(`Failed to toggle screen playback: ${err.message}`);
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const handleTogglePower = async (screen: Screen, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActioningId(screen.id);
+    try {
+      const nextState = screen.powerState === 'off' ? 'on' : 'off';
+      await api.post(`/screens/${screen.id}/power`, { state: nextState });
+      onRefresh?.();
+    } catch (err: any) {
+      alert(`Failed to change power state: ${err.message}`);
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const handleUnpairScreen = async (screen: Screen, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (
+      !confirm(
+        `Are you sure you want to unpair "${screen.name}"?\n\nThe TV will return to the pairing code screen.`
+      )
+    ) {
+      return;
+    }
+    setActioningId(screen.id);
+    try {
+      await api.post(`/screens/${screen.id}/unpair`);
+      onRefresh?.();
+    } catch (err: any) {
+      alert(`Failed to unpair screen: ${err.message}`);
+    } finally {
+      setActioningId(null);
     }
   };
 
@@ -497,7 +552,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   }}
                 >
                   <div>
-                    <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                    <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
                       {screen.name}
                     </h4>
                     <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>
@@ -505,22 +560,36 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {screen.isPaused && (
+                    {screen.powerState === 'off' && (
                       <span
                         style={{
                           padding: '2px 7px',
                           borderRadius: '10px',
                           fontSize: '0.65rem',
                           fontWeight: 800,
-                          backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                          color: '#DC2626',
-                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          backgroundColor: '#334155',
+                          color: '#CBD5E1',
+                        }}
+                      >
+                        STANDBY
+                      </span>
+                    )}
+                    {screen.isPaused && screen.powerState !== 'off' && (
+                      <span
+                        style={{
+                          padding: '2px 7px',
+                          borderRadius: '10px',
+                          fontSize: '0.65rem',
+                          fontWeight: 800,
+                          backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                          color: '#059669',
+                          border: '1px solid rgba(16, 185, 129, 0.3)',
                           display: 'flex',
                           alignItems: 'center',
                           gap: '3px',
                         }}
                       >
-                        <Pause size={9} fill="currentColor" /> PAUSED
+                        QUEUE ONLY
                       </span>
                     )}
                     <span className={`status-badge ${screen.connectionStatus}`}>
@@ -539,58 +608,108 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 {/* Queue Display URL Preview */}
                 <div
                   style={{
-                    padding: '10px 14px',
-                    borderRadius: '10px',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
                     backgroundColor: 'var(--bg-subtle)',
                     border: '1px solid var(--border-color)',
-                    marginBottom: '14px',
+                    marginBottom: '12px',
                   }}
                 >
                   <div
                     style={{
-                      fontSize: '0.675rem',
+                      fontSize: '0.65rem',
                       color: 'var(--text-subtle)',
                       textTransform: 'uppercase',
                       letterSpacing: '0.04em',
                       fontWeight: 700,
                     }}
                   >
-                    Active HMS Queue URL
+                    Active Doctor HMS Queue URL
                   </div>
                   <div
                     style={{
-                      fontSize: '0.785rem',
+                      fontSize: '0.75rem',
                       color: 'var(--text-muted)',
                       fontFamily: 'monospace',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
-                      marginTop: '3px',
+                      marginTop: '2px',
                     }}
                   >
                     {screen.queueUrl}
                   </div>
                 </div>
 
-                {/* Meta details */}
+                {/* Direct Action Controls Bar on Dashboard Card */}
                 <div
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    fontSize: '0.75rem',
-                    color: 'var(--text-subtle)',
+                    borderTop: '1px solid var(--border-subtle)',
+                    paddingTop: '10px',
+                    marginTop: 'auto',
+                    flexWrap: 'wrap',
+                    gap: '6px',
                   }}
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <Clock size={13} />
-                    {screen.lastHeartbeat
-                      ? `Sync ${new Date(screen.lastHeartbeat).toLocaleTimeString()}`
-                      : 'Never connected'}
-                  </span>
-                  <span style={{ color: 'var(--primary)', fontWeight: 700 }}>
-                    Configure TV →
-                  </span>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      className={`btn btn-sm ${screen.isPaused ? 'btn-primary' : 'btn-secondary'}`}
+                      onClick={(e) => handleTogglePause(screen.id, e)}
+                      disabled={actioningId === screen.id}
+                      title={screen.isPaused ? 'Resume ads rotation' : 'Stop ads and show only queue'}
+                      style={
+                        screen.isPaused
+                          ? { backgroundColor: '#10B981', borderColor: '#10B981', color: '#fff', fontSize: '0.725rem', padding: '4px 8px' }
+                          : { color: '#059669', fontSize: '0.725rem', padding: '4px 8px' }
+                      }
+                    >
+                      {actioningId === screen.id ? (
+                        <Loader2 size={12} className="spin" />
+                      ) : screen.isPaused ? (
+                        <Play size={12} fill="currentColor" />
+                      ) : (
+                        <Pause size={12} fill="currentColor" />
+                      )}
+                      <span>{screen.isPaused ? 'Resume' : 'Pause Ads'}</span>
+                    </button>
+
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={(e) => handleTogglePower(screen, e)}
+                      disabled={actioningId === screen.id}
+                      title={screen.powerState === 'off' ? 'Wake screen display' : 'Turn screen display OFF (Standby)'}
+                      style={{ fontSize: '0.725rem', padding: '4px 8px', color: screen.powerState === 'off' ? '#059669' : '#64748B' }}
+                    >
+                      <Power size={12} />
+                      <span>{screen.powerState === 'off' ? 'Wake' : 'Sleep'}</span>
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => onSelectScreen(screen)}
+                      title="Edit screen configuration"
+                      style={{ fontSize: '0.725rem', padding: '4px 8px' }}
+                    >
+                      <Edit2 size={12} />
+                      <span>Settings</span>
+                    </button>
+
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={(e) => handleUnpairScreen(screen, e)}
+                      disabled={actioningId === screen.id}
+                      title="Unpair TV"
+                      style={{ fontSize: '0.725rem', padding: '4px 8px', color: '#DC2626' }}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
