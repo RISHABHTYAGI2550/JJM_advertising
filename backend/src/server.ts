@@ -10,6 +10,8 @@ import { screenRepo } from './db/repositories/screenRepository';
 import { commandService } from './services/commandService';
 import { healthMonitor } from './services/healthMonitor';
 import { Logger } from './services/logger';
+import { pairingService } from './services/pairingService';
+
 
 import screensRouter from './routes/screens.routes';
 import departmentsRouter from './routes/departments.routes';
@@ -137,13 +139,20 @@ app.use(
 // TV Display Routes (Public — no admin token required, TV clients only need screenId)
 app.use('/api/display', displayRouter);
 
-// TV Pairing Session (Public — TV calls this on boot to get pairing code, no admin token)
-app.post('/api/screens/pair-session', pairingRateLimiter, (req, res, next) => {
-  // Delegate to screensRouter's pair-session handler directly
-  screensRouter(req, res, next);
+// ─── TV Pairing Session (PUBLIC — no admin token, rate-limited) ─────────────
+// TV calls POST /api/screens/pair-session on boot to get a 6-digit pairing code.
+// This MUST be registered BEFORE the auth-protected /api/screens router.
+app.post('/api/screens/pair-session', pairingRateLimiter, (req: Request, res: Response) => {
+  const { socketId, deviceMetadata } = req.body;
+  try {
+    const session = pairingService.createPairingSession(socketId, deviceMetadata);
+    return res.json({ success: true, session });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
 });
 
-// Admin Management Routes (Require admin session token)
+// ─── Admin Management Routes (require admin session token) ───────────────────
 app.use('/api/screens', requireAdminAuth, screensRouter);
 app.use('/api/departments', requireAdminAuth, departmentsRouter);
 app.use('/api/media', requireAdminAuth, mediaRouter);
