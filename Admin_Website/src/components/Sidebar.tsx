@@ -7,11 +7,14 @@ import {
   ListVideo,
   Megaphone,
   FileText,
-  Activity,
   Video,
   AlertTriangle,
   LogOut,
   X,
+  Layers,
+  Settings,
+  Activity,
+  User,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -39,10 +42,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     {
       id: 'emergency',
-      label: 'Emergency Alert',
+      label: 'Emergency Alerts',
       icon: AlertTriangle,
-      badge: hasActiveEmergency ? 'LIVE' : 'URGENT',
-      isEmergencyBadge: true,
+      badge: hasActiveEmergency ? 'ACTIVE' : undefined,
+      isEmergency: true,
     },
     {
       id: 'screens',
@@ -52,16 +55,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'live-feeds',
-      label: 'Live Feeds (CCTV)',
+      label: 'Live Feeds',
       icon: Video,
       badge: 'LIVE',
-      isLiveBadge: true,
+      isLive: true,
     },
+    { id: 'reconciliation', label: 'Reconciliation', icon: Layers },
     { id: 'departments', label: 'Departments', icon: Building2 },
     { id: 'media', label: 'Media Assets', icon: ImageIcon },
     { id: 'playlists', label: 'Playlists', icon: ListVideo },
     { id: 'campaigns', label: 'Campaigns & Ads', icon: Megaphone },
     { id: 'audit', label: 'Audit Logs', icon: FileText },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   return (
@@ -73,9 +78,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            backdropFilter: 'blur(4px)',
-            zIndex: 90,
+            backgroundColor: 'rgba(32, 32, 51, 0.4)',
+            zIndex: 900,
           }}
         />
       )}
@@ -83,103 +87,103 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <aside
         className={`app-sidebar ${isMobileOpen ? 'mobile-open' : ''}`}
         style={{
-          width: '265px',
+          width: 'var(--sidebar-width)',
           backgroundColor: '#FFFFFF',
-          borderRight: '1px solid var(--border-color)',
+          borderRight: '1px solid var(--border)',
           display: 'flex',
           flexDirection: 'column',
           flexShrink: 0,
           height: '100vh',
           position: 'sticky',
           top: 0,
-          boxShadow: '2px 0 16px rgba(107, 58, 138, 0.03)',
-          zIndex: 100,
-          transition: 'transform 0.3s ease',
+          zIndex: 950,
         }}
       >
-        {/* Brand Header with JJM Colors */}
+        {/* Brand Header */}
         <div
           style={{
-            padding: '20px',
-            borderBottom: '1px solid var(--border-color)',
+            height: 'var(--header-height)',
+            padding: '0 20px',
+            borderBottom: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div
               style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #6B3A8A 0%, #9D6BBA 100%)',
+                width: '36px',
+                height: '36px',
+                borderRadius: '8px',
+                backgroundColor: 'var(--primary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 6px 16px rgba(107, 58, 138, 0.35)',
+                color: '#FFFFFF',
+                flexShrink: 0,
               }}
             >
-              <Activity size={22} color="#ffffff" />
+              <Activity size={20} strokeWidth={2.2} />
             </div>
             <div>
-              <h1
+              <div
                 style={{
-                  fontSize: '1.1rem',
-                  fontWeight: 800,
-                  color: '#1F162B',
-                  letterSpacing: '-0.02em',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: 'var(--dark)',
+                  letterSpacing: '0.02em',
                   lineHeight: 1.2,
-                  fontFamily: 'var(--font-display)',
                 }}
               >
                 JJM HOSPITAL
-              </h1>
-              <span
+              </div>
+              <div
                 style={{
-                  fontSize: '0.7rem',
+                  fontSize: '10px',
+                  fontWeight: 600,
                   color: 'var(--primary)',
-                  fontWeight: 700,
                   letterSpacing: '0.04em',
                 }}
               >
-                KASHIPUR SIGNAGE HUB
-              </span>
+                KASHIPUR • SIGNAGE
+              </div>
             </div>
           </div>
 
-          {/* Close button on mobile */}
           {onCloseMobile && (
             <button
               onClick={onCloseMobile}
-              className="mobile-close-btn"
+              className="mobile-menu-btn"
               style={{
                 display: 'none',
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                color: 'var(--text-subtle)',
+                color: 'var(--text-secondary)',
+                padding: '4px',
               }}
             >
-              <X size={20} />
+              <X size={18} />
             </button>
           )}
         </div>
 
-        {/* Navigation List */}
+        {/* Navigation Items */}
         <nav
           style={{
-            padding: '16px 12px',
+            padding: '16px 10px',
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
-            gap: '4px',
+            gap: '2px',
             overflowY: 'auto',
           }}
         >
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
+
             return (
               <button
                 key={item.id}
@@ -188,90 +192,90 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onCloseMobile?.();
                 }}
                 style={{
+                  position: 'relative',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   width: '100%',
-                  padding: '10px 14px',
-                  borderRadius: '10px',
-                  border: isActive
-                    ? '1px solid rgba(107, 58, 138, 0.25)'
-                    : '1px solid transparent',
-                  background: isActive
-                    ? 'linear-gradient(135deg, rgba(107, 58, 138, 0.12) 0%, rgba(157, 107, 186, 0.10) 100%)'
-                    : 'transparent',
-                  color: isActive ? 'var(--primary)' : 'var(--text-muted)',
+                  padding: '9px 12px 9px 14px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: 'none',
+                  backgroundColor: isActive ? 'var(--primary-subtle)' : 'transparent',
+                  color: isActive ? 'var(--primary)' : 'var(--text-secondary)',
                   cursor: 'pointer',
-                  fontWeight: isActive ? 700 : 500,
-                  fontSize: '0.85rem',
-                  transition: 'all 0.15s ease',
+                  fontWeight: isActive ? 600 : 500,
+                  fontSize: '13px',
+                  transition: 'background-color 0.15s ease, color 0.15s ease',
+                  textAlign: 'left',
                 }}
                 onMouseEnter={(e) => {
                   if (!isActive) {
-                    e.currentTarget.style.backgroundColor = 'rgba(107, 58, 138, 0.05)';
+                    e.currentTarget.style.backgroundColor = 'var(--bg-main)';
                     e.currentTarget.style.color = 'var(--text-main)';
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (!isActive) {
                     e.currentTarget.style.backgroundColor = 'transparent';
-                    e.currentTarget.style.color = 'var(--text-muted)';
+                    e.currentTarget.style.color = 'var(--text-secondary)';
                   }
                 }}
               >
+                {/* Active Indicator Bar */}
+                {isActive && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: '6px',
+                      bottom: '6px',
+                      width: '3px',
+                      backgroundColor: 'var(--primary)',
+                      borderRadius: '0 2px 2px 0',
+                    }}
+                  />
+                )}
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <Icon
-                    size={18}
+                    size={17}
                     color={
-                      item.id === 'emergency'
-                        ? '#EF4444'
-                        : isActive
-                        ? '#6B3A8A'
-                        : '#766B82'
+                      isActive
+                        ? 'var(--primary)'
+                        : item.isEmergency && hasActiveEmergency
+                        ? 'var(--danger)'
+                        : 'var(--text-secondary)'
                     }
-                    strokeWidth={isActive ? 2.3 : 2}
+                    strokeWidth={isActive ? 2.2 : 1.8}
                   />
                   <span>{item.label}</span>
                 </div>
+
                 {item.badge && (
                   <span
                     style={{
-                      padding: '2px 8px',
-                      borderRadius: '12px',
-                      fontSize: '0.675rem',
-                      fontWeight: 800,
-                      letterSpacing: '0.04em',
-                      backgroundColor: item.isEmergencyBadge
-                        ? hasActiveEmergency
-                          ? 'rgba(239, 68, 68, 0.2)'
-                          : 'rgba(239, 68, 68, 0.1)'
-                        : item.isLiveBadge
-                        ? 'rgba(239, 68, 68, 0.12)'
-                        : onlineScreensCount > 0
-                        ? 'rgba(16, 185, 129, 0.12)'
-                        : 'rgba(107, 58, 138, 0.08)',
-                      color: item.isEmergencyBadge
-                        ? '#EF4444'
-                        : item.isLiveBadge
-                        ? '#dc2626'
-                        : onlineScreensCount > 0
-                        ? '#047857'
-                        : 'var(--text-subtle)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      letterSpacing: '0.02em',
+                      backgroundColor: item.isEmergency
+                        ? 'var(--danger-subtle)'
+                        : item.isLive
+                        ? 'var(--danger-subtle)'
+                        : isActive
+                        ? '#FFFFFF'
+                        : '#EDE8F2',
+                      color: item.isEmergency || item.isLive
+                        ? 'var(--danger)'
+                        : 'var(--primary)',
+                      border: item.isEmergency
+                        ? '1px solid #F8C8CB'
+                        : item.isLive
+                        ? '1px solid #F8C8CB'
+                        : '1px solid #E2D7E9',
                     }}
                   >
-                    {item.isEmergencyBadge && hasActiveEmergency && (
-                      <span
-                        style={{
-                          width: '6px',
-                          height: '6px',
-                          borderRadius: '50%',
-                          backgroundColor: '#EF4444',
-                        }}
-                      />
-                    )}
                     {item.badge}
                   </span>
                 )}
@@ -280,39 +284,97 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        {/* Footer Logout & System Info */}
+        {/* Bottom Section: Connection Status + Admin Profile */}
         <div
           style={{
-            padding: '14px 18px',
-            borderTop: '1px solid var(--border-color)',
-            backgroundColor: '#FAF8FD',
+            padding: '14px 16px',
+            borderTop: '1px solid var(--border)',
+            backgroundColor: 'var(--bg-subtle)',
             display: 'flex',
             flexDirection: 'column',
-            gap: '10px',
+            gap: '12px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div className="pulse-dot-online" />
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-main)' }}>
-              Central Engine Connected
-            </span>
+          {/* Connection Status Indicator */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '11px',
+              fontWeight: 500,
+              color: 'var(--text-secondary)',
+            }}
+          >
+            <span
+              style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--success)',
+                display: 'inline-block',
+              }}
+            />
+            <span>Central Engine Connected</span>
           </div>
 
-          {onLogout && (
-            <button
-              onClick={onLogout}
-              className="btn btn-secondary btn-sm"
-              style={{
-                width: '100%',
-                justifyContent: 'center',
-                color: '#DC2626',
-                borderColor: 'rgba(239, 68, 68, 0.25)',
-              }}
-            >
-              <LogOut size={15} />
-              <span>Logout Admin</span>
-            </button>
-          )}
+          {/* Admin Profile & Logout */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingTop: '8px',
+              borderTop: '1px solid #EAE5F0',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--primary-subtle)',
+                  color: 'var(--primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                }}
+              >
+                <User size={15} />
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--dark)' }}>
+                  Admin
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                  Super Admin
+                </div>
+              </div>
+            </div>
+
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="btn-ghost"
+                style={{
+                  padding: '6px',
+                  borderRadius: 'var(--radius-sm)',
+                  cursor: 'pointer',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--text-secondary)',
+                }}
+                title="Log Out"
+              >
+                <LogOut size={16} />
+              </button>
+            )}
+          </div>
         </div>
       </aside>
     </>

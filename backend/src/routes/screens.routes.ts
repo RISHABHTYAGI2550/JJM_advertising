@@ -1,45 +1,52 @@
 import { Router, Request, Response } from 'express';
-import { db } from '../db/database';
+import { screenRepo } from '../db/repositories/screenRepository';
+import { deviceRepo } from '../db/repositories/deviceRepository';
+import { commandRepo } from '../db/repositories/commandRepository';
+import { auditRepo } from '../db/repositories/miscRepositories';
 import { pairingService } from '../services/pairingService';
 import { resolverService } from '../services/resolverService';
+import { commandService } from '../services/commandService';
+import { healthMonitor } from '../services/healthMonitor';
 import { io } from '../server';
+import { CommandType } from '../types';
 
 const router = Router();
 
-// GET all screens
+// GET all screens with accurate health states
 router.get('/', (req: Request, res: Response) => {
-  const screens = db.getScreens().map(s => {
-    // Determine online/offline based on last heartbeat within 60s
-    let isOnline = false;
-    if (s.lastHeartbeat) {
-      const diffSeconds = (Date.now() - new Date(s.lastHeartbeat).getTime()) / 1000;
-      isOnline = diffSeconds <= 60;
-    }
+  const screens = screenRepo.getAll().map(s => {
+    const health = healthMonitor.evaluateScreenHealth(s);
     return {
       ...s,
-      connectionStatus: isOnline ? 'online' : 'offline',
+      healthStatus: health,
+      connectionStatus: health === 'OFFLINE' ? 'offline' : 'online',
     };
   });
   res.json({ success: true, screens });
 });
 
-// GET screen by ID
+// GET screen by ID with resolved config
 router.get('/:id', (req: Request, res: Response) => {
-  const screen = db.getScreenById(req.params.id);
+  const screen = screenRepo.getById(req.params.id);
   if (!screen) {
     return res.status(404).json({ success: false, message: 'Screen not found' });
   }
   try {
     const resolvedConfig = resolverService.resolveScreenConfig(screen.id);
-    return res.json({ success: true, screen, resolvedConfig });
-  } catch {
-    return res.json({ success: true, screen, resolvedConfig: null });
+    const health = healthMonitor.evaluateScreenHealth(screen);
+    return res.json({
+      success: true,
+      screen: { ...screen, healthStatus: health },
+      resolvedConfig,
+    });
+  } catch (err: any) {
+    return res.json({ success: true, screen, resolvedConfig: null, error: err.message });
   }
 });
 
 // POST Create screen manually
 router.post('/', (req: Request, res: Response) => {
-  const { name, code, departmentId, location, queueUrl, playlistId } = req.body;
+  const { name, code, departmentId, location, queueUrl, playlistId, staleThresholdSeconds } = req.body;
   if (!name || !departmentId || !queueUrl) {
     return res.status(400).json({ success: false, message: 'Missing required fields (name, departmentId, queueUrl)' });
   }
@@ -47,51 +54,55 @@ router.post('/', (req: Request, res: Response) => {
   const screenCode = code || `DOC${Math.floor(100 + Math.random() * 900)}`;
   const screenId = `SCR-${screenCode}`;
 
-  const screen = db.createScreen({
+  const screen = screenRepo.create({
     id: screenId,
     name,
     code: screenCode,
     departmentId,
     location: location || 'Hospital OPD Area',
     queueUrl,
+    staleThresholdSeconds: staleThresholdSeconds || 180,
+    targetConfigVersion: 1,
+    appliedConfigVersion: 0,
+    mediaManifestVersion: 1,
     status: 'active',
     connectionStatus: 'offline',
-    lastHeartbeat: null,
+    healthStatus: 'OFFLINE',
     currentContent: 'queue',
     currentCampaignId: null,
     playlistId: playlistId || 'PL-DEFAULT',
     deviceToken: null,
     playerVersion: '1.0.0',
+    lastHeartbeat: null,
   });
 
+  auditRepo.log('CREATE_SCREEN', 'Screen', screen.id, `Created screen ${screen.name}`);
   return res.status(201).json({ success: true, screen });
 });
 
-// PATCH Update screen
+// PATCH Update screen (increments targetConfigVersion)
 router.patch('/:id', (req: Request, res: Response) => {
-  const screen = db.updateScreen(req.params.id, req.body);
-  if (!screen) {
+  const existing = screenRepo.getById(req.params.id);
+  if (!existing) {
     return res.status(404).json({ success: false, message: 'Screen not found' });
   }
 
-  // Notify connected TV via WebSocket to update config immediately
+  // Increment authoritative target config version so version divergence is tracked
+  const newTargetVersion = existing.targetConfigVersion + 1;
+
+  const updated = screenRepo.update(req.params.id, {
+    ...req.body,
+    targetConfigVersion: newTargetVersion,
+  });
+
   if (io) {
-    io.to(`screen:${screen.id}`).emit('config:update', {
-      config: resolverService.resolveScreenConfig(screen.id),
-    });
+    const config = resolverService.resolveScreenConfig(existing.id);
+    io.to(`screen:${existing.id}`).emit('config:update', { config, targetConfigVersion: newTargetVersion });
+    io.emit('screens:changed');
   }
 
-  db.logAudit('UPDATE_SCREEN', 'Screen', screen.id, `Updated screen parameters: ${JSON.stringify(req.body)}`);
-  return res.json({ success: true, screen });
-});
-
-// DELETE Screen
-router.delete('/:id', (req: Request, res: Response) => {
-  const success = db.deleteScreen(req.params.id);
-  if (!success) {
-    return res.status(404).json({ success: false, message: 'Screen not found' });
-  }
-  return res.json({ success: true, message: 'Screen deleted' });
+  auditRepo.log('UPDATE_SCREEN', 'Screen', existing.id, `Updated screen params (targetConfigVersion: ${newTargetVersion})`);
+  return res.json({ success: true, screen: updated });
 });
 
 // POST TV generates pairing code
@@ -101,11 +112,11 @@ router.post('/pair-session', (req: Request, res: Response) => {
   return res.json({ success: true, session });
 });
 
-// POST Admin submits pairing code
-router.post('/pair', (req: Request, res: Response) => {
-  const { pairingCode, name, code, departmentId, location, queueUrl } = req.body;
+// POST Admin claims pairing code
+router.post('/pair-claim', (req: Request, res: Response) => {
+  const { pairingCode, name, code, departmentId, location, queueUrl, staleThresholdSeconds } = req.body;
   if (!pairingCode || !name || !departmentId || !queueUrl) {
-    return res.status(400).json({ success: false, message: 'Missing pairing parameters' });
+    return res.status(400).json({ success: false, message: 'Missing required pairing fields' });
   }
 
   try {
@@ -113,73 +124,30 @@ router.post('/pair', (req: Request, res: Response) => {
       name,
       code,
       departmentId,
-      location,
+      location: location || 'Hospital OPD Area',
       queueUrl,
+      staleThresholdSeconds: staleThresholdSeconds || 180,
     });
 
-    // Notify TV client over Socket.IO if connected
     if (io) {
       io.emit(`pair:${pairingCode}`, {
         success: true,
-        screen,
+        screenId: screen.id,
         deviceToken: session.deviceToken,
-        config: resolverService.resolveScreenConfig(screen.id),
+        screen,
+      });
+      io.to(`pairing:${pairingCode}`).emit('paired', {
+        screenId: screen.id,
+        deviceToken: session.deviceToken,
+        screen,
       });
       io.emit('screens:changed');
     }
 
-    return res.json({ success: true, screen, deviceToken: session.deviceToken });
+    return res.json({ success: true, screen, session });
   } catch (err: any) {
     return res.status(400).json({ success: false, message: err.message });
   }
-});
-
-// POST Bulk Pause / Resume All Screens Playback
-router.post('/pause-all', (req: Request, res: Response) => {
-  const { isPaused } = req.body;
-  const shouldPause = isPaused !== undefined ? !!isPaused : true;
-  const screens = db.getScreens();
-
-  screens.forEach((s) => {
-    db.updateScreen(s.id, { isPaused: shouldPause });
-    if (io) {
-      const config = resolverService.resolveScreenConfig(s.id);
-      io.to(`screen:${s.id}`).emit('config:update', { config });
-      io.to(`screen:${s.id}`).emit('command:playback', { isPaused: shouldPause });
-      io.emit('command:playback', { screenId: s.id, isPaused: shouldPause });
-    }
-  });
-
-  if (io) {
-    io.emit('screens:changed');
-  }
-
-  db.logAudit('TOGGLE_PAUSE_ALL', 'Screen', 'ALL', `All screens playback ${shouldPause ? 'PAUSED (Queue Only)' : 'RESUMED'}`);
-  return res.json({ success: true, isPaused: shouldPause, count: screens.length });
-});
-
-// POST Bulk Remote Power All Screens
-router.post('/power-all', (req: Request, res: Response) => {
-  const { state } = req.body;
-  const targetState: 'on' | 'off' = state === 'off' ? 'off' : 'on';
-  const screens = db.getScreens();
-
-  screens.forEach((s) => {
-    db.updateScreen(s.id, { powerState: targetState });
-    if (io) {
-      const config = resolverService.resolveScreenConfig(s.id);
-      io.to(`screen:${s.id}`).emit('command:power', { state: targetState, isPowerOn: targetState === 'on' });
-      io.emit('command:power', { screenId: s.id, state: targetState, isPowerOn: targetState === 'on' });
-      io.to(`screen:${s.id}`).emit('config:update', { config });
-    }
-  });
-
-  if (io) {
-    io.emit('screens:changed');
-  }
-
-  db.logAudit('REMOTE_POWER_ALL', 'Screen', 'ALL', `All screens power turned ${targetState.toUpperCase()}`);
-  return res.json({ success: true, powerState: targetState, count: screens.length });
 });
 
 // POST Unpair screen
@@ -198,109 +166,103 @@ router.post('/:id/unpair', (req: Request, res: Response) => {
   return res.json({ success: true, message: 'Screen unpaired successfully' });
 });
 
-// POST Remote refresh screen
-router.post('/:id/refresh', (req: Request, res: Response) => {
-  const screen = db.getScreenById(req.params.id);
+// DELETE Screen
+router.delete('/:id', (req: Request, res: Response) => {
+  const screen = screenRepo.getById(req.params.id);
   if (!screen) {
     return res.status(404).json({ success: false, message: 'Screen not found' });
   }
 
   if (io) {
-    const config = resolverService.resolveScreenConfig(screen.id);
-    io.to(`screen:${screen.id}`).emit('command:refresh', { config });
-    io.emit('command:refresh', { screenId: screen.id, config });
-    db.logAudit('REMOTE_COMMAND', 'Screen', screen.id, 'Sent remote refresh command');
+    io.to(`screen:${screen.id}`).emit('screen:unpaired', { screenId: screen.id });
+    io.emit('screen:unpaired', { screenId: screen.id });
   }
 
-  return res.json({ success: true, message: 'Refresh command broadcasted to screen' });
-});
-
-// POST Remote test content
-router.post('/:id/test-content', (req: Request, res: Response) => {
-  const { message } = req.body;
-  const screen = db.getScreenById(req.params.id);
-  if (!screen) {
-    return res.status(404).json({ success: false, message: 'Screen not found' });
-  }
+  screenRepo.delete(screen.id);
+  auditRepo.log('DELETE_SCREEN', 'Screen', screen.id, `Permanently deleted screen ${screen.name}`);
 
   if (io) {
-    io.to(`screen:${screen.id}`).emit('command:test', {
-      message: message || 'Test Display Command from JJM Hospital Control Center',
-    });
-    db.logAudit('TEST_DISPLAY', 'Screen', screen.id, 'Triggered test display');
-  }
-
-  return res.json({ success: true, message: 'Test display command sent' });
-});
-
-// POST Toggle Play / Pause on Screen
-router.post('/:id/toggle-pause', (req: Request, res: Response) => {
-  const screen = db.getScreenById(req.params.id);
-  if (!screen) {
-    return res.status(404).json({ success: false, message: 'Screen not found' });
-  }
-
-  const newPaused = !screen.isPaused;
-  const updated = db.updateScreen(screen.id, { isPaused: newPaused });
-
-  if (io) {
-    const config = resolverService.resolveScreenConfig(screen.id);
-    io.to(`screen:${screen.id}`).emit('config:update', { config });
-    io.to(`screen:${screen.id}`).emit('command:playback', { isPaused: newPaused });
-    io.emit('command:playback', { screenId: screen.id, isPaused: newPaused });
-    io.emit('screen:playback', { screenId: screen.id, isPaused: newPaused });
-    io.emit('config:update', { screenId: screen.id, config });
     io.emit('screens:changed');
   }
 
-  db.logAudit('TOGGLE_PAUSE_SCREEN', 'Screen', screen.id, `Screen playback ${newPaused ? 'PAUSED (Queue Only)' : 'RESUMED'}`);
-  return res.json({ success: true, isPaused: newPaused, screen: updated });
+  return res.json({ success: true, message: 'Screen deleted successfully' });
 });
 
-// POST Remote Power On / Off (Standby Mode)
-router.post('/:id/power', (req: Request, res: Response) => {
-  const { state } = req.body;
-  const screen = db.getScreenById(req.params.id);
-  if (!screen) {
-    return res.status(404).json({ success: false, message: 'Screen not found' });
+// ==========================================
+// TARGETED TV COMMAND CENTER ENDPOINTS (V2)
+// ==========================================
+
+// POST Dispatch targeted command to exact physical screen
+router.post('/:id/commands', async (req: Request, res: Response) => {
+  const { commandType, payload } = req.body;
+  if (!commandType) {
+    return res.status(400).json({ success: false, message: 'commandType is required' });
   }
 
-  const newPowerState: 'on' | 'off' = state === 'off' ? 'off' : (state === 'on' ? 'on' : (screen.powerState === 'off' ? 'on' : 'off'));
-  const updated = db.updateScreen(screen.id, { powerState: newPowerState });
-
-  if (io) {
-    const config = resolverService.resolveScreenConfig(screen.id);
-    io.to(`screen:${screen.id}`).emit('command:power', { state: newPowerState, isPowerOn: newPowerState === 'on' });
-    io.to(`screen:${screen.id}`).emit('screen:power', { state: newPowerState, isPowerOn: newPowerState === 'on' });
-    io.emit('command:power', { screenId: screen.id, state: newPowerState, isPowerOn: newPowerState === 'on' });
-    io.emit('screen:power', { screenId: screen.id, state: newPowerState, isPowerOn: newPowerState === 'on' });
-    io.to(`screen:${screen.id}`).emit('config:update', { config });
-    io.emit('config:update', { screenId: screen.id, config });
-    io.emit('screens:changed');
+  try {
+    const command = await commandService.dispatchCommand(req.params.id, commandType as CommandType, payload);
+    return res.status(202).json({ success: true, command });
+  } catch (err: any) {
+    return res.status(404).json({ success: false, message: err.message });
   }
-
-  db.logAudit('REMOTE_POWER', 'Screen', screen.id, `Screen power turned ${newPowerState.toUpperCase()}`);
-  return res.json({ success: true, powerState: newPowerState, screen: updated });
 });
 
-// POST Request Real Snapshot from Screen
-router.post('/:id/request-snapshot', (req: Request, res: Response) => {
-  const screen = db.getScreenById(req.params.id);
-  if (!screen) {
-    return res.status(404).json({ success: false, message: 'Screen not found' });
-  }
+// GET Recent commands for a screen
+router.get('/:id/commands', (req: Request, res: Response) => {
+  const commands = commandRepo.getRecentForScreen(req.params.id, 15);
+  return res.json({ success: true, commands });
+});
 
-  if (io) {
-    io.to(`screen:${screen.id}`).emit('command:request_snapshot', { screenId: screen.id });
-    io.emit('command:request_snapshot', { screenId: screen.id });
-  }
+// POST TV acknowledges receipt of command (STAGE: RECEIVED)
+router.post('/:id/commands/:commandId/received', (req: Request, res: Response) => {
+  const cmd = commandService.handleReceived(req.params.commandId, req.params.id);
+  return res.json({ success: true, command: cmd });
+});
 
-  return res.json({
-    success: true,
-    message: 'Snapshot requested from screen',
-    latestSnapshot: screen.latestSnapshot,
-    latestSnapshotTime: screen.latestSnapshotTime,
-  });
+// POST TV reports command applied (STAGE: APPLIED)
+router.post('/:id/commands/:commandId/applied', (req: Request, res: Response) => {
+  const cmd = commandService.handleApplied(req.params.commandId, req.params.id);
+  return res.json({ success: true, command: cmd });
+});
+
+// POST TV acknowledges command completion (STAGE: ACKNOWLEDGED)
+router.post('/:id/commands/:commandId/ack', (req: Request, res: Response) => {
+  const { resultPayload } = req.body;
+  const cmd = commandService.handleAcknowledged(req.params.commandId, req.params.id, resultPayload);
+  return res.json({ success: true, command: cmd });
+});
+
+// POST TV reports command failure (STAGE: FAILED)
+router.post('/:id/commands/:commandId/fail', (req: Request, res: Response) => {
+  const { errorMessage } = req.body;
+  const cmd = commandService.handleFailed(req.params.commandId, req.params.id, errorMessage || 'Unknown execution error');
+  return res.json({ success: true, command: cmd });
+});
+
+// Backwards-compatible convenience routes routing to the formal Command Lifecycle
+router.post('/:id/refresh', async (req: Request, res: Response) => {
+  const command = await commandService.dispatchCommand(req.params.id, 'SYNC_CONFIG');
+  return res.json({ success: true, message: 'Sync config command dispatched', command });
+});
+
+router.post('/:id/reload-queue', async (req: Request, res: Response) => {
+  const command = await commandService.dispatchCommand(req.params.id, 'RELOAD_QUEUE');
+  return res.json({ success: true, message: 'Reload queue command dispatched', command });
+});
+
+router.post('/:id/restart-player', async (req: Request, res: Response) => {
+  const command = await commandService.dispatchCommand(req.params.id, 'RESTART_PLAYER');
+  return res.json({ success: true, message: 'Restart player command dispatched', command });
+});
+
+router.post('/:id/clear-cache', async (req: Request, res: Response) => {
+  const command = await commandService.dispatchCommand(req.params.id, 'CLEAR_CACHE');
+  return res.json({ success: true, message: 'Clear cache command dispatched', command });
+});
+
+router.post('/:id/request-snapshot', async (req: Request, res: Response) => {
+  const command = await commandService.dispatchCommand(req.params.id, 'TAKE_SNAPSHOT');
+  return res.json({ success: true, message: 'Snapshot command dispatched', command });
 });
 
 export default router;

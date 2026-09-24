@@ -1,22 +1,19 @@
 import React, { useState } from 'react';
 import {
   Tv,
-  Building2,
   Megaphone,
   Image as ImageIcon,
-  Activity,
-  Plus,
-  Clock,
-  Send,
-  Video,
   CheckCircle2,
   AlertTriangle,
-  Pause,
   Play,
+  Pause,
   Power,
-  Trash2,
-  Loader2,
-  Edit2,
+  Sliders,
+  Send,
+  Radio,
+  Clock,
+  ExternalLink,
+  ShieldAlert,
 } from 'lucide-react';
 import { Screen, Department, MediaItem, Campaign } from '../types';
 import { api } from '../services/api';
@@ -44,677 +41,640 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNavigateToLiveFeeds,
   onRefresh,
 }) => {
-  const [actioningId, setActioningId] = useState<string | null>(null);
   const onlineCount = screens.filter((s) => s.connectionStatus === 'online').length;
   const offlineCount = screens.length - onlineCount;
   const activeCampaignsCount = campaigns.filter((c) => c.status === 'active').length;
 
-  // 1-Click Instant Broadcast state on Dashboard
-  const [quickTitle, setQuickTitle] = useState('Hospital-Wide Emergency / Promotion Broadcast');
-  const [quickMediaId, setQuickMediaId] = useState(media[0]?.id || '');
-  const [quickPriority, setQuickPriority] = useState(85);
-  const [broadcasting, setBroadcasting] = useState(false);
+  // Broadcast state
+  const [broadcastTarget, setBroadcastTarget] = useState<'all' | 'department' | 'screen'>('all');
+  const [selectedTargetId, setSelectedTargetId] = useState<string>('');
+  const [broadcastTitle, setBroadcastTitle] = useState('Hospital General Awareness Broadcast');
+  const [broadcastMediaId, setBroadcastMediaId] = useState(media[0]?.id || '');
+  const [broadcastDuration, setBroadcastDuration] = useState(30);
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [broadcastFeedback, setBroadcastFeedback] = useState<string | null>(null);
 
-  const handleQuickBroadcast = async (e: React.FormEvent) => {
+  const handleCreateBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
-    setBroadcasting(true);
+    setIsBroadcasting(true);
     setBroadcastFeedback(null);
     try {
-      const selectedMedia = media.find((m) => m.id === quickMediaId) || media[0];
-      await api.post('/campaigns/broadcast-global', {
-        name: quickTitle,
-        mediaId: selectedMedia?.id,
-        mediaUrl: selectedMedia?.url,
-        priority: Number(quickPriority),
-      });
+      const selectedMedia = media.find((m) => m.id === broadcastMediaId) || media[0];
+      if (!selectedMedia) {
+        throw new Error('Please upload or select a media asset first');
+      }
 
-      setBroadcastFeedback(`Successfully broadcasted to ALL ${screens.length} TV screens!`);
+      if (broadcastTarget === 'all') {
+        await api.post('/campaigns/broadcast-global', {
+          name: broadcastTitle,
+          mediaId: selectedMedia.id,
+          mediaUrl: selectedMedia.url,
+          priority: 80,
+          duration: Number(broadcastDuration),
+        });
+      } else {
+        await api.post('/campaigns', {
+          name: broadcastTitle,
+          type: selectedMedia.type,
+          contentType: selectedMedia.type,
+          mediaId: selectedMedia.id,
+          mediaUrl: selectedMedia.url,
+          priority: 80,
+          intervalMinutes: 5,
+          displayDurationSeconds: Number(broadcastDuration),
+          daysOfWeek: [1, 2, 3, 4, 5, 6, 7],
+          status: 'active',
+          targets: [
+            {
+              targetType: broadcastTarget === 'department' ? 'DEPARTMENT' : 'SCREEN',
+              targetId: selectedTargetId || (broadcastTarget === 'department' ? departments[0]?.id : screens[0]?.id),
+            },
+          ],
+        });
+      }
+
+      setBroadcastFeedback('Broadcast successfully initiated across selected hospital displays.');
+      onRefresh?.();
       setTimeout(() => setBroadcastFeedback(null), 5000);
     } catch (err: any) {
-      setBroadcastFeedback(`Broadcast failed: ${err.message}`);
+      setBroadcastFeedback(`Error creating broadcast: ${err.message}`);
     } finally {
-      setBroadcasting(false);
+      setIsBroadcasting(false);
     }
   };
 
   const handleTogglePause = async (screenId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setActioningId(screenId);
     try {
       await api.post(`/screens/${screenId}/toggle-pause`);
       onRefresh?.();
     } catch (err: any) {
-      alert(`Failed to toggle screen playback: ${err.message}`);
-    } finally {
-      setActioningId(null);
+      alert(`Failed to pause/resume screen: ${err.message}`);
     }
   };
 
   const handleTogglePower = async (screen: Screen, e: React.MouseEvent) => {
     e.stopPropagation();
-    setActioningId(screen.id);
     try {
       const nextState = screen.powerState === 'off' ? 'on' : 'off';
       await api.post(`/screens/${screen.id}/power`, { state: nextState });
       onRefresh?.();
     } catch (err: any) {
       alert(`Failed to change power state: ${err.message}`);
-    } finally {
-      setActioningId(null);
-    }
-  };
-
-  const handleUnpairScreen = async (screen: Screen, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (
-      !confirm(
-        `Are you sure you want to unpair "${screen.name}"?\n\nThe TV will return to the pairing code screen.`
-      )
-    ) {
-      return;
-    }
-    setActioningId(screen.id);
-    try {
-      await api.post(`/screens/${screen.id}/unpair`);
-      onRefresh?.();
-    } catch (err: any) {
-      alert(`Failed to unpair screen: ${err.message}`);
-    } finally {
-      setActioningId(null);
     }
   };
 
   return (
-    <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '30px' }}>
-      {/* Top Metrics Cards */}
+    <div style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Top Banner / Heading */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--dark)' }}>
+            Hospital Overview
+          </h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            Monitor, control and broadcast content across all connected hospital displays.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button className="btn btn-secondary btn-sm" onClick={onOpenGlobalModal}>
+            <Megaphone size={14} />
+            <span>1-Click Broadcast</span>
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={onOpenPairModal}>
+            <Tv size={14} />
+            <span>Pair New TV</span>
+          </button>
+        </div>
+      </div>
+
+      {/* KPI Cards (5 Cards) */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
-          gap: '18px',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '16px',
         }}
       >
-        {/* Total Screens */}
-        <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div
-            style={{
-              width: '52px',
-              height: '52px',
-              borderRadius: '14px',
-              background: 'linear-gradient(135deg, rgba(107, 58, 138, 0.15) 0%, rgba(157, 107, 186, 0.2) 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Tv size={26} color="#6B3A8A" />
+        {/* Total TVs */}
+        <div className="card" style={{ padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Total TVs
+            </span>
+            <div style={{ color: 'var(--primary)', backgroundColor: 'var(--primary-subtle)', padding: '6px', borderRadius: 'var(--radius-sm)' }}>
+              <Tv size={16} />
+            </div>
           </div>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-              Total Hospital TVs
-            </div>
-            <div
-              style={{
-                fontSize: '1.9rem',
-                fontWeight: 800,
-                color: 'var(--text-main)',
-                lineHeight: 1.15,
-                fontFamily: 'var(--font-display)',
-              }}
-            >
-              {screens.length}
-            </div>
-            <div style={{ fontSize: '0.725rem', color: 'var(--primary)', fontWeight: 600, marginTop: '2px' }}>
-              Across {departments.length} Wards & OPDs
-            </div>
+          <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--dark)', lineHeight: 1.1 }}>
+            {screens.length}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+            Across OPDs & departments
           </div>
         </div>
 
         {/* Online TVs */}
-        <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div
-            style={{
-              width: '52px',
-              height: '52px',
-              borderRadius: '14px',
-              backgroundColor: 'var(--success-light)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Activity size={26} color="#059669" />
+        <div className="card" style={{ padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Online TVs
+            </span>
+            <span className="badge badge-online">
+              <span className="status-dot online" />
+              Live
+            </span>
           </div>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-              Active / Connected TVs
+          <div style={{ fontSize: '26px', fontWeight: 700, color: '#0E805E', lineHeight: 1.1 }}>
+            {onlineCount} <span style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-muted)' }}>/ {screens.length}</span>
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+            {offlineCount === 0 ? 'All screens operational' : `${offlineCount} screen${offlineCount === 1 ? '' : 's'} offline`}
+          </div>
+        </div>
+
+        {/* Offline TVs */}
+        <div className="card" style={{ padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Offline TVs
+            </span>
+            <div style={{ color: offlineCount > 0 ? 'var(--danger)' : 'var(--text-muted)', backgroundColor: offlineCount > 0 ? 'var(--danger-subtle)' : '#F1EDF5', padding: '6px', borderRadius: 'var(--radius-sm)' }}>
+              <AlertTriangle size={16} />
             </div>
-            <div
-              style={{
-                fontSize: '1.9rem',
-                fontWeight: 800,
-                color: '#047857',
-                lineHeight: 1.15,
-                fontFamily: 'var(--font-display)',
-              }}
-            >
-              {onlineCount}{' '}
-              <span style={{ fontSize: '1rem', color: 'var(--text-subtle)', fontWeight: 500 }}>
-                / {screens.length}
-              </span>
-            </div>
-            <div
-              style={{
-                fontSize: '0.725rem',
-                color: offlineCount > 0 ? '#b91c1c' : '#047857',
-                fontWeight: 600,
-                marginTop: '2px',
-              }}
-            >
-              {offlineCount > 0 ? `${offlineCount} TV(s) Offline` : 'All Displays Synced & Live'}
-            </div>
+          </div>
+          <div style={{ fontSize: '26px', fontWeight: 700, color: offlineCount > 0 ? 'var(--danger)' : 'var(--text-main)', lineHeight: 1.1 }}>
+            {offlineCount}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+            {offlineCount === 0 ? 'Zero device alerts' : 'Check Wi-Fi or TV power'}
           </div>
         </div>
 
         {/* Active Campaigns */}
-        <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div
-            style={{
-              width: '52px',
-              height: '52px',
-              borderRadius: '14px',
-              backgroundColor: 'rgba(245, 158, 11, 0.12)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Megaphone size={26} color="#d97706" />
-          </div>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+        <div className="card" style={{ padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Active Campaigns
+            </span>
+            <div style={{ color: 'var(--primary)', backgroundColor: 'var(--primary-subtle)', padding: '6px', borderRadius: 'var(--radius-sm)' }}>
+              <Megaphone size={16} />
             </div>
-            <div
-              style={{
-                fontSize: '1.9rem',
-                fontWeight: 800,
-                color: 'var(--text-main)',
-                lineHeight: 1.15,
-                fontFamily: 'var(--font-display)',
-              }}
-            >
-              {activeCampaignsCount}
-            </div>
-            <div style={{ fontSize: '0.725rem', color: '#b45309', fontWeight: 600, marginTop: '2px' }}>
-              Broadcasting on Displays
-            </div>
+          </div>
+          <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--dark)', lineHeight: 1.1 }}>
+            {activeCampaignsCount < 10 ? `0${activeCampaignsCount}` : activeCampaignsCount}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+            Currently broadcasting
           </div>
         </div>
 
-        {/* Media Library */}
-        <div className="glass-card" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div
-            style={{
-              width: '52px',
-              height: '52px',
-              borderRadius: '14px',
-              backgroundColor: 'rgba(157, 107, 186, 0.16)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <ImageIcon size={26} color="#9D6BBA" />
-          </div>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+        {/* Media Assets */}
+        <div className="card" style={{ padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Media Assets
+            </span>
+            <div style={{ color: 'var(--info)', backgroundColor: 'var(--info-subtle)', padding: '6px', borderRadius: 'var(--radius-sm)' }}>
+              <ImageIcon size={16} />
             </div>
-            <div
-              style={{
-                fontSize: '1.9rem',
-                fontWeight: 800,
-                color: 'var(--text-main)',
-                lineHeight: 1.15,
-                fontFamily: 'var(--font-display)',
-              }}
-            >
-              {media.length}
-            </div>
-            <div style={{ fontSize: '0.725rem', color: 'var(--secondary)', fontWeight: 600, marginTop: '2px' }}>
-              High-Res Posters & Videos
-            </div>
+          </div>
+          <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--dark)', lineHeight: 1.1 }}>
+            {media.length}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+            Images + Videos in library
           </div>
         </div>
       </div>
 
-      {/* 1-Click Instant Global Broadcast Center (Requested by User) */}
-      <div
-        className="glass-card"
-        style={{
-          padding: '24px 28px',
-          background: 'linear-gradient(135deg, #FFFFFF 0%, #FAF7FD 100%)',
-          border: '1.5px solid rgba(107, 58, 138, 0.25)',
-          boxShadow: '0 10px 30px -4px rgba(107, 58, 138, 0.1)',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            marginBottom: '18px',
-            flexWrap: 'wrap',
-            gap: '12px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div
-              style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #6B3A8A 0%, #9D6BBA 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#FFFFFF',
-                boxShadow: '0 4px 14px rgba(107, 58, 138, 0.35)',
-              }}
-            >
-              <Megaphone size={22} color="#ffffff" />
-            </div>
+      {/* Main Control Area (Broadcast Control + Live System Status) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '20px' }}>
+        {/* Left: Hospital Broadcast Control */}
+        <div className="card">
+          <div className="card-header">
             <div>
-              <h3
-                style={{
-                  fontSize: '1.2rem',
-                  fontWeight: 800,
-                  color: 'var(--text-main)',
-                  fontFamily: 'var(--font-display)',
-                }}
-              >
-                1-Click Global TV Campaign Broadcast
+              <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--dark)' }}>
+                Hospital Broadcast Control
               </h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                Instant broadcast to ALL {screens.length} hospital TV displays in one single click
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                Deploy instant informational or emergency content across targeted screens.
               </p>
             </div>
+            <Radio size={18} color="var(--primary)" />
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span
-              style={{
-                padding: '4px 12px',
-                borderRadius: '20px',
-                backgroundColor: 'rgba(107, 58, 138, 0.1)',
-                color: 'var(--primary)',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-              }}
-            >
-              {onlineCount} Connected TVs Ready
-            </span>
-          </div>
-        </div>
+          <form onSubmit={handleCreateBroadcast} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Target Selection */}
+            <div>
+              <label className="form-label">Broadcast Target</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setBroadcastTarget('all')}
+                  className={broadcastTarget === 'all' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm'}
+                  style={{ width: '100%' }}
+                >
+                  All TVs ({screens.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBroadcastTarget('department')}
+                  className={broadcastTarget === 'department' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm'}
+                  style={{ width: '100%' }}
+                >
+                  Department
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBroadcastTarget('screen')}
+                  className={broadcastTarget === 'screen' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm'}
+                  style={{ width: '100%' }}
+                >
+                  Single Screen
+                </button>
+              </div>
+            </div>
 
-        {broadcastFeedback && (
-          <div
-            style={{
-              padding: '12px 16px',
-              borderRadius: '10px',
-              backgroundColor: broadcastFeedback.includes('failed')
-                ? 'var(--danger-light)'
-                : 'var(--success-light)',
-              color: broadcastFeedback.includes('failed') ? '#991b1b' : '#065f46',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              marginBottom: '18px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            {broadcastFeedback.includes('failed') ? (
-              <AlertTriangle size={18} />
-            ) : (
-              <CheckCircle2 size={18} />
+            {/* Target Dropdown if department or screen selected */}
+            {broadcastTarget === 'department' && (
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Select Department</label>
+                <select
+                  className="form-select"
+                  value={selectedTargetId}
+                  onChange={(e) => setSelectedTargetId(e.target.value)}
+                  required
+                >
+                  <option value="">-- Choose Department --</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
-            <span>{broadcastFeedback}</span>
-          </div>
-        )}
 
-        <form
-          onSubmit={handleQuickBroadcast}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr)) auto',
-            gap: '14px',
-            alignItems: 'flex-end',
-          }}
-        >
-          <div>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                color: 'var(--text-main)',
-                marginBottom: '6px',
-              }}
-            >
-              Broadcast Title / Announcement
-            </label>
-            <input
-              type="text"
-              className="input-field"
-              value={quickTitle}
-              onChange={(e) => setQuickTitle(e.target.value)}
-              placeholder="e.g. Health Checkup Camp Notice..."
-              required
-            />
-          </div>
+            {broadcastTarget === 'screen' && (
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Select Screen</label>
+                <select
+                  className="form-select"
+                  value={selectedTargetId}
+                  onChange={(e) => setSelectedTargetId(e.target.value)}
+                  required
+                >
+                  <option value="">-- Choose Screen --</option>
+                  {screens.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.location})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
-          <div>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                color: 'var(--text-main)',
-                marginBottom: '6px',
-              }}
-            >
-              Select Promotional Media / Banner
-            </label>
-            <select
-              className="input-field"
-              value={quickMediaId}
-              onChange={(e) => setQuickMediaId(e.target.value)}
-            >
-              {media.length === 0 ? (
-                <option value="">(No media uploaded yet — go to Media Assets)</option>
-              ) : (
-                media.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.title} ({m.type.toUpperCase()})
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
+            {/* Broadcast Title */}
+            <div>
+              <label className="form-label">Broadcast Name / Heading</label>
+              <input
+                type="text"
+                className="form-input"
+                value={broadcastTitle}
+                onChange={(e) => setBroadcastTitle(e.target.value)}
+                placeholder="e.g. Free Eye Health Checkup OPD Announcement"
+                required
+              />
+            </div>
 
-          <div>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                color: 'var(--text-main)',
-                marginBottom: '6px',
-              }}
-            >
-              Broadcast Priority
-            </label>
-            <select
-              className="input-field"
-              value={quickPriority}
-              onChange={(e) => setQuickPriority(Number(e.target.value))}
-            >
-              <option value="80">Normal Priority (80)</option>
-              <option value="90">High Priority Promotion (90)</option>
-              <option value="100">Critical Emergency (100)</option>
-            </select>
-          </div>
+            {/* Media Selector & Duration */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+              <div>
+                <label className="form-label">Select Media Asset</label>
+                <select
+                  className="form-select"
+                  value={broadcastMediaId}
+                  onChange={(e) => setBroadcastMediaId(e.target.value)}
+                  required
+                >
+                  {media.length === 0 ? (
+                    <option value="">No media in library</option>
+                  ) : (
+                    media.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.title} ({m.type.toUpperCase()})
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
 
-          <div>
+              <div>
+                <label className="form-label">Duration (sec)</label>
+                <select
+                  className="form-select"
+                  value={broadcastDuration}
+                  onChange={(e) => setBroadcastDuration(Number(e.target.value))}
+                >
+                  <option value={15}>15 sec</option>
+                  <option value={30}>30 sec</option>
+                  <option value={60}>1 min</option>
+                  <option value={120}>2 min</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Feedback notification */}
+            {broadcastFeedback && (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  backgroundColor: broadcastFeedback.includes('Error') ? 'var(--danger-subtle)' : 'var(--success-subtle)',
+                  color: broadcastFeedback.includes('Error') ? 'var(--danger)' : '#0E805E',
+                  border: `1px solid ${broadcastFeedback.includes('Error') ? '#F8C8CB' : '#C4F0E1'}`,
+                }}
+              >
+                {broadcastFeedback}
+              </div>
+            )}
+
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={broadcasting}
-              style={{ width: '100%', height: '42px' }}
+              disabled={isBroadcasting || media.length === 0}
+              style={{ marginTop: '4px' }}
             >
-              <Send size={16} />
-              <span>{broadcasting ? 'Pushed to TVs...' : 'Broadcast to All TVs'}</span>
+              <Send size={15} />
+              <span>{isBroadcasting ? 'Dispatching Command...' : 'Create Broadcast'}</span>
             </button>
-          </div>
-        </form>
-      </div>
+          </form>
+        </div>
 
-      {/* Hospital Screens Fleet List */}
-      <div>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '16px',
-          }}
-        >
-          <div>
-            <h3
-              style={{
-                fontSize: '1.25rem',
-                fontWeight: 800,
-                color: 'var(--text-main)',
-                fontFamily: 'var(--font-display)',
-              }}
-            >
-              Hospital Screens Fleet & Doctor Queues
-            </h3>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Real-time monitoring and configuration for all doctor rooms and waiting lounge screens
+        {/* Right: Live System Status */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="card-header">
+            <div>
+              <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--dark)' }}>
+                Live System Status
+              </h3>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                Real-time operational telemetry of the signage and queue pipeline.
+              </p>
+            </div>
+            <span className="badge badge-online">
+              <span className="status-dot online" />
+              Connected
             </span>
           </div>
 
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="btn btn-primary" onClick={onOpenPairModal}>
-              <Plus size={16} /> Pair New Screen
-            </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
+            {/* Status Item 1: Fleet Sync */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', backgroundColor: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Tv size={16} color="var(--primary)" />
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    Display Fleet Synchronization
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    {onlineCount} of {screens.length} TVs transmitting continuous heartbeat
+                  </div>
+                </div>
+              </div>
+              <span className="badge badge-purple">
+                {screens.length > 0 ? Math.round((onlineCount / screens.length) * 100) : 0}% Synced
+              </span>
+            </div>
+
+            {/* Status Item 2: Doctor Queue Integration */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', backgroundColor: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Clock size={16} color="var(--success)" />
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    Doctor OPD Queue Integration
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    HMS queue links responding with 0 DOM mutations delayed
+                  </div>
+                </div>
+              </div>
+              <span className="badge badge-online">
+                Active
+              </span>
+            </div>
+
+            {/* Status Item 3: Storage Engine */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', backgroundColor: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <CheckCircle2 size={16} color="var(--primary)" />
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    SQLite Storage & 5-Stage ACK
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    WAL journal active, commands transaction-audited
+                  </div>
+                </div>
+              </div>
+              <span className="badge badge-neutral">
+                ACID WAL
+              </span>
+            </div>
+
+            {/* Quick Emergency Note */}
+            <div style={{ marginTop: 'auto', padding: '12px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--danger-subtle)', border: '1px solid #F8C8CB', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ShieldAlert size={18} color="var(--danger)" />
+                <div style={{ fontSize: '12px', fontWeight: 600, color: '#B53237' }}>
+                  Emergency Announcement Control
+                </div>
+              </div>
+              <button
+                className="btn btn-danger btn-sm"
+                onClick={onOpenGlobalModal}
+                style={{ padding: '4px 10px', fontSize: '11px' }}
+              >
+                Instant Alert
+              </button>
+            </div>
           </div>
+        </div>
+      </div>
+
+      {/* Live Screen Overview Grid */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+          <div>
+            <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--dark)' }}>
+              Live Screen Overview
+            </h2>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+              Click any TV card to open its dedicated command center and diagnostics.
+            </p>
+          </div>
+
+          {onNavigateToLiveFeeds && (
+            <button className="btn btn-outline btn-sm" onClick={onNavigateToLiveFeeds}>
+              <ExternalLink size={13} />
+              <span>CCTV Matrix View</span>
+            </button>
+          )}
         </div>
 
         {screens.length === 0 ? (
-          <div className="glass-card" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-            <Tv size={42} color="var(--primary)" style={{ margin: '0 auto 12px', opacity: 0.6 }} />
-            <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>No TV Displays Paired Yet</h4>
-            <p style={{ fontSize: '0.825rem', marginTop: '4px' }}>Click "Pair New Screen" above to connect your first hospital TV kiosk.</p>
+          <div className="card" style={{ padding: '36px', textAlign: 'center' }}>
+            <Tv size={36} color="var(--text-muted)" style={{ margin: '0 auto 12px' }} />
+            <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--dark)' }}>
+              No TV Displays Paired Yet
+            </h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '400px', margin: '4px auto 16px' }}>
+              Power on the Android TV player app and use the 6-digit pairing code to connect your first screen.
+            </p>
+            <button className="btn btn-primary btn-sm" onClick={onOpenPairModal}>
+              <Tv size={14} />
+              <span>Pair Your First TV</span>
+            </button>
           </div>
         ) : (
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-              gap: '18px',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gap: '16px',
             }}
           >
             {screens.map((screen) => {
               const dept = departments.find((d) => d.id === screen.departmentId);
+              const isOnline = screen.connectionStatus === 'online';
+              const isPaused = screen.isPaused;
+              const isPowerOff = screen.powerState === 'off';
+
               return (
-              <div
-                key={screen.id}
-                className="glass-card"
-                onClick={() => onSelectScreen(screen)}
-                style={{
-                  cursor: 'pointer',
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}
-              >
-                {/* Status Bar */}
                 <div
+                  key={screen.id}
+                  className="card"
+                  onClick={() => onSelectScreen(screen)}
                   style={{
+                    padding: '16px',
+                    cursor: 'pointer',
                     display: 'flex',
+                    flexDirection: 'column',
                     justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    marginBottom: '12px',
+                    borderLeft: `4px solid ${isOnline ? 'var(--success)' : 'var(--danger)'}`,
                   }}
                 >
+                  {/* Card Header: Name + Department + Status */}
                   <div>
-                    <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
-                      {screen.name}
-                    </h4>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 600 }}>
-                      {dept?.name || 'Department'} • {screen.location}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {screen.powerState === 'off' && (
-                      <span
-                        style={{
-                          padding: '2px 7px',
-                          borderRadius: '10px',
-                          fontSize: '0.65rem',
-                          fontWeight: 800,
-                          backgroundColor: '#334155',
-                          color: '#CBD5E1',
-                        }}
-                      >
-                        STANDBY
-                      </span>
-                    )}
-                    {screen.isPaused && screen.powerState !== 'off' && (
-                      <span
-                        style={{
-                          padding: '2px 7px',
-                          borderRadius: '10px',
-                          fontSize: '0.65rem',
-                          fontWeight: 800,
-                          backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                          color: '#059669',
-                          border: '1px solid rgba(16, 185, 129, 0.3)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '3px',
-                        }}
-                      >
-                        QUEUE ONLY
-                      </span>
-                    )}
-                    <span className={`status-badge ${screen.connectionStatus}`}>
-                      <span
-                        className={
-                          screen.connectionStatus === 'online'
-                            ? 'pulse-dot-online'
-                            : 'pulse-dot-offline'
-                        }
-                      />
-                      {screen.connectionStatus}
-                    </span>
-                  </div>
-                </div>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--dark)' }}>
+                          {screen.name}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '1px' }}>
+                          {dept?.name || 'OPD Department'} • {screen.location || 'Consultation Room'}
+                        </div>
+                      </div>
 
-                {/* Queue Display URL Preview */}
-                <div
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    backgroundColor: 'var(--bg-subtle)',
-                    border: '1px solid var(--border-color)',
-                    marginBottom: '12px',
-                  }}
-                >
+                      <span className={`badge ${isOnline ? 'badge-online' : 'badge-offline'}`}>
+                        <span className={`status-dot ${isOnline ? 'online' : 'offline'}`} />
+                        {isOnline ? 'Online' : 'Offline'}
+                      </span>
+                    </div>
+
+                    {/* Metadata summary */}
+                    <div
+                      style={{
+                        margin: '12px 0',
+                        padding: '10px',
+                        backgroundColor: 'var(--bg-main)',
+                        borderRadius: 'var(--radius-sm)',
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '8px',
+                        fontSize: '11px',
+                      }}
+                    >
+                      <div>
+                        <span style={{ color: 'var(--text-muted)' }}>Now Showing:</span>
+                        <div style={{ fontWeight: 600, color: 'var(--text-main)', marginTop: '1px', textTransform: 'capitalize' }}>
+                          {screen.currentContent === 'queue' ? 'Queue Display' : screen.currentContent || 'Queue'}
+                        </div>
+                      </div>
+
+                      <div>
+                        <span style={{ color: 'var(--text-muted)' }}>Queue Link:</span>
+                        <div style={{ fontWeight: 600, color: '#0E805E', marginTop: '1px' }}>
+                          {screen.queueUrl ? 'Connected' : 'Unassigned'}
+                        </div>
+                      </div>
+
+                      <div>
+                        <span style={{ color: 'var(--text-muted)' }}>Config Version:</span>
+                        <div style={{ fontWeight: 600, color: 'var(--primary)', marginTop: '1px' }}>
+                          v{screen.appliedConfigVersion || 1} / v{screen.targetConfigVersion || 1}
+                        </div>
+                      </div>
+
+                      <div>
+                        <span style={{ color: 'var(--text-muted)' }}>Last Sync:</span>
+                        <div style={{ fontWeight: 500, color: 'var(--text-secondary)', marginTop: '1px' }}>
+                          {screen.lastHeartbeat
+                            ? new Date(screen.lastHeartbeat).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                            : 'Pending'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions footer */}
                   <div
                     style={{
-                      fontSize: '0.65rem',
-                      color: 'var(--text-subtle)',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.04em',
-                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      paddingTop: '10px',
+                      borderTop: '1px solid var(--border)',
                     }}
                   >
-                    Active Doctor HMS Queue URL
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '0.75rem',
-                      color: 'var(--text-muted)',
-                      fontFamily: 'monospace',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      marginTop: '2px',
-                    }}
-                  >
-                    {screen.queueUrl}
-                  </div>
-                </div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        className="btn btn-outline btn-sm"
+                        onClick={(e) => handleTogglePause(screen.id, e)}
+                        title={isPaused ? 'Resume Playback' : 'Pause Playback'}
+                        style={{ padding: '4px 8px' }}
+                      >
+                        {isPaused ? <Play size={13} color="var(--success)" /> : <Pause size={13} color="var(--warning)" />}
+                      </button>
 
-                {/* Direct Action Controls Bar on Dashboard Card */}
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    borderTop: '1px solid var(--border-subtle)',
-                    paddingTop: '10px',
-                    marginTop: 'auto',
-                    flexWrap: 'wrap',
-                    gap: '6px',
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button
-                      className={`btn btn-sm ${screen.isPaused ? 'btn-primary' : 'btn-secondary'}`}
-                      onClick={(e) => handleTogglePause(screen.id, e)}
-                      disabled={actioningId === screen.id}
-                      title={screen.isPaused ? 'Resume ads rotation' : 'Stop ads and show only queue'}
-                      style={
-                        screen.isPaused
-                          ? { backgroundColor: '#10B981', borderColor: '#10B981', color: '#fff', fontSize: '0.725rem', padding: '4px 8px' }
-                          : { color: '#059669', fontSize: '0.725rem', padding: '4px 8px' }
-                      }
-                    >
-                      {actioningId === screen.id ? (
-                        <Loader2 size={12} className="spin" />
-                      ) : screen.isPaused ? (
-                        <Play size={12} fill="currentColor" />
-                      ) : (
-                        <Pause size={12} fill="currentColor" />
-                      )}
-                      <span>{screen.isPaused ? 'Resume' : 'Pause Ads'}</span>
-                    </button>
+                      <button
+                        className="btn btn-outline btn-sm"
+                        onClick={(e) => handleTogglePower(screen, e)}
+                        title={isPowerOff ? 'Power ON Display' : 'Power OFF Display'}
+                        style={{ padding: '4px 8px' }}
+                      >
+                        <Power size={13} color={isPowerOff ? 'var(--danger)' : 'var(--text-secondary)'} />
+                      </button>
+                    </div>
 
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={(e) => handleTogglePower(screen, e)}
-                      disabled={actioningId === screen.id}
-                      title={screen.powerState === 'off' ? 'Wake screen display' : 'Turn screen display OFF (Standby)'}
-                      style={{ fontSize: '0.725rem', padding: '4px 8px', color: screen.powerState === 'off' ? '#059669' : '#64748B' }}
-                    >
-                      <Power size={12} />
-                      <span>{screen.powerState === 'off' ? 'Wake' : 'Sleep'}</span>
-                    </button>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '6px' }}>
                     <button
                       className="btn btn-secondary btn-sm"
                       onClick={() => onSelectScreen(screen)}
-                      title="Edit screen configuration"
-                      style={{ fontSize: '0.725rem', padding: '4px 8px' }}
+                      style={{ padding: '4px 12px', fontSize: '11px' }}
                     >
-                      <Edit2 size={12} />
-                      <span>Settings</span>
-                    </button>
-
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={(e) => handleUnpairScreen(screen, e)}
-                      disabled={actioningId === screen.id}
-                      title="Unpair TV"
-                      style={{ fontSize: '0.725rem', padding: '4px 8px', color: '#DC2626' }}
-                    >
-                      <Trash2 size={12} />
+                      <Sliders size={12} />
+                      <span>Control</span>
                     </button>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>

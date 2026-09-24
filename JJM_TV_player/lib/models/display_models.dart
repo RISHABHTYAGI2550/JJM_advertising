@@ -6,6 +6,7 @@ class PlaylistItem {
   final String title;
   final int duration; // seconds
   final int order;
+  final String? sha256Hash;
 
   PlaylistItem({
     required this.id,
@@ -15,6 +16,7 @@ class PlaylistItem {
     required this.title,
     required this.duration,
     required this.order,
+    this.sha256Hash,
   });
 
   factory PlaylistItem.fromJson(Map<String, dynamic> json) {
@@ -26,6 +28,7 @@ class PlaylistItem {
       title: json['title'] ?? '',
       duration: json['duration'] is int ? json['duration'] : int.tryParse(json['duration']?.toString() ?? '15') ?? 15,
       order: json['order'] is int ? json['order'] : int.tryParse(json['order']?.toString() ?? '1') ?? 1,
+      sha256Hash: json['sha256Hash'],
     );
   }
 
@@ -38,6 +41,7 @@ class PlaylistItem {
       'title': title,
       'duration': duration,
       'order': order,
+      'sha256Hash': sha256Hash,
     };
   }
 }
@@ -48,6 +52,9 @@ class ResolvedConfig {
   final String departmentId;
   final String departmentName;
   final String queueUrl;
+  final int staleThresholdSeconds;
+  final int configVersion;
+  final int mediaManifestVersion;
   final List<PlaylistItem> playlist;
   final Map<String, dynamic> settings;
   final String? announcementTicker;
@@ -58,6 +65,9 @@ class ResolvedConfig {
     required this.departmentId,
     required this.departmentName,
     required this.queueUrl,
+    this.staleThresholdSeconds = 180,
+    this.configVersion = 1,
+    this.mediaManifestVersion = 1,
     required this.playlist,
     required this.settings,
     this.announcementTicker,
@@ -73,6 +83,9 @@ class ResolvedConfig {
       departmentId: json['departmentId'] ?? '',
       departmentName: json['departmentName'] ?? '',
       queueUrl: json['queueUrl'] ?? '',
+      staleThresholdSeconds: json['staleThresholdSeconds'] is int ? json['staleThresholdSeconds'] : 180,
+      configVersion: json['configVersion'] is int ? json['configVersion'] : int.tryParse(json['configVersion']?.toString() ?? '1') ?? 1,
+      mediaManifestVersion: json['mediaManifestVersion'] is int ? json['mediaManifestVersion'] : int.tryParse(json['mediaManifestVersion']?.toString() ?? '1') ?? 1,
       playlist: items,
       settings: json['settings'] as Map<String, dynamic>? ?? {},
       announcementTicker: json['settings']?['announcementTicker'],
@@ -86,6 +99,9 @@ class ResolvedConfig {
       'departmentId': departmentId,
       'departmentName': departmentName,
       'queueUrl': queueUrl,
+      'staleThresholdSeconds': staleThresholdSeconds,
+      'configVersion': configVersion,
+      'mediaManifestVersion': mediaManifestVersion,
       'playlist': playlist.map((i) => i.toJson()).toList(),
       'settings': settings,
     };

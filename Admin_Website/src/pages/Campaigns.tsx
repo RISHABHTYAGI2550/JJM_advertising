@@ -4,16 +4,20 @@ import {
   Plus,
   Trash2,
   Edit2,
-  CheckCircle2,
-  PauseCircle,
-  PlayCircle,
-  ListVideo,
-  Image as ImageIcon,
+  Play,
+  Pause,
   Clock,
   Tv,
+  Image as ImageIcon,
+  Copy,
+  Building2,
+  X,
+  Sliders,
+  CheckCircle2,
+  Calendar,
 } from 'lucide-react';
 import { Campaign, MediaItem, Department, Screen, Playlist } from '../types';
-import { api } from '../services/api';
+import { api, getBackendBaseUrl } from '../services/api';
 
 interface CampaignsPageProps {
   campaigns: Campaign[];
@@ -34,125 +38,134 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   onOpenGlobalModal,
   onRefresh,
 }) => {
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'active' | 'scheduled' | 'paused' | 'expired'>('active');
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
 
   // Form states
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [campaignContentType, setCampaignContentType] = useState<
-    'playlist' | 'single_image' | 'single_image_only' | 'only_queue'
-  >('single_image');
-  const [targetScope, setTargetScope] = useState<'global' | 'department' | 'screen'>('global');
-  const [targetId, setTargetId] = useState('');
   const [selectedMediaId, setSelectedMediaId] = useState(media[0]?.id || '');
-  const [selectedPlaylistId, setSelectedPlaylistId] = useState(playlists[0]?.id || '');
+  const [targetScope, setTargetScope] = useState<'all' | 'department' | 'screen'>('all');
+  const [targetId, setTargetId] = useState('');
   const [priority, setPriority] = useState(70);
-  const [loading, setLoading] = useState(false);
+  const [duration, setDuration] = useState(15);
+  const [intervalMinutes, setIntervalMinutes] = useState(5);
+  const [daysOfWeek, setDaysOfWeek] = useState<number[]>([1, 2, 3, 4, 5, 6, 7]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Filtering campaigns by tab
+  const filteredCampaigns = campaigns.filter((c) => {
+    if (activeTab === 'active') return c.status === 'active';
+    if (activeTab === 'scheduled') return c.status === 'scheduled';
+    if (activeTab === 'paused') return c.status === 'paused';
+    if (activeTab === 'expired') return c.status === 'expired';
+    return true;
+  });
 
   const openCreateModal = () => {
     setName('');
     setDescription('');
-    setCampaignContentType('single_image');
-    setTargetScope('global');
-    setTargetId('');
     setSelectedMediaId(media[0]?.id || '');
-    setSelectedPlaylistId(playlists[0]?.id || '');
+    setTargetScope('all');
+    setTargetId('');
     setPriority(70);
-    setShowAddModal(true);
+    setDuration(15);
+    setIntervalMinutes(5);
+    setShowCreateModal(true);
   };
 
   const openEditModal = (c: Campaign) => {
     setEditingCampaign(c);
     setName(c.name);
     setDescription(c.description || '');
-    setCampaignContentType(
-      c.contentType || (c.playlistId ? 'playlist' : c.mediaId ? 'single_image' : 'only_queue')
-    );
-    setTargetScope(
-      c.type === 'global' ? 'global' : c.type === 'screen' ? 'screen' : 'department'
-    );
-    setTargetId(c.targetIds && c.targetIds[0] !== 'all' ? c.targetIds[0] : '');
     setSelectedMediaId(c.mediaId || media[0]?.id || '');
-    setSelectedPlaylistId(c.playlistId || playlists[0]?.id || '');
+    setTargetScope(c.type === 'global' ? 'all' : c.type === 'screen' ? 'screen' : 'department');
+    setTargetId(c.targetIds && c.targetIds[0] !== 'all' ? c.targetIds[0] : '');
     setPriority(c.priority || 70);
+    setDuration(c.displayDurationSeconds || 15);
+    setIntervalMinutes(c.intervalMinutes || 5);
   };
 
-  const isImageContentType =
-    campaignContentType === 'single_image' || campaignContentType === 'single_image_only';
-
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleSaveCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setIsSubmitting(true);
     try {
       const selectedMedia = media.find((m) => m.id === selectedMediaId);
-      const targetIds =
-        targetScope === 'global' ? ['all'] : targetId ? [targetId] : [];
+      const targetIds = targetScope === 'all' ? ['all'] : targetId ? [targetId] : [];
 
-      await api.post('/campaigns', {
-        name,
-        description,
-        type: targetScope === 'global' ? 'global' : targetScope,
-        contentType: campaignContentType,
-        targetIds,
-        mediaId: isImageContentType ? selectedMedia?.id : undefined,
-        mediaUrl: isImageContentType ? selectedMedia?.url : undefined,
-        playlistId: campaignContentType === 'playlist' ? selectedPlaylistId : undefined,
-        priority: Number(priority),
-        status: 'active',
-      });
-
-      setShowAddModal(false);
+      if (editingCampaign) {
+        await api.patch(`/campaigns/${editingCampaign.id}`, {
+          name,
+          description,
+          type: targetScope === 'all' ? 'global' : targetScope,
+          mediaId: selectedMedia?.id,
+          mediaUrl: selectedMedia?.url,
+          targetIds,
+          priority: Number(priority),
+          displayDurationSeconds: Number(duration),
+          intervalMinutes: Number(intervalMinutes),
+        });
+        setEditingCampaign(null);
+      } else {
+        await api.post('/campaigns', {
+          name,
+          description,
+          type: targetScope === 'all' ? 'global' : targetScope,
+          contentType: selectedMedia?.type || 'image',
+          mediaId: selectedMedia?.id,
+          mediaUrl: selectedMedia?.url,
+          targetIds,
+          priority: Number(priority),
+          displayDurationSeconds: Number(duration),
+          intervalMinutes: Number(intervalMinutes),
+          daysOfWeek,
+          status: 'active',
+        });
+        setShowCreateModal(false);
+      }
       onRefresh();
     } catch (err: any) {
-      alert(`Error creating campaign: ${err.message}`);
+      alert(`Error saving campaign: ${err.message}`);
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingCampaign) return;
-    setLoading(true);
-    try {
-      const selectedMedia = media.find((m) => m.id === selectedMediaId);
-      const targetIds =
-        targetScope === 'global' ? ['all'] : targetId ? [targetId] : [];
-
-      await api.patch(`/campaigns/${editingCampaign.id}`, {
-        name,
-        description,
-        type: targetScope === 'global' ? 'global' : targetScope,
-        contentType: campaignContentType,
-        targetIds,
-        mediaId: isImageContentType ? selectedMedia?.id : undefined,
-        mediaUrl: isImageContentType ? selectedMedia?.url : undefined,
-        playlistId: campaignContentType === 'playlist' ? selectedPlaylistId : undefined,
-        priority: Number(priority),
-      });
-
-      setEditingCampaign(null);
-      onRefresh();
-    } catch (err: any) {
-      alert(`Error updating campaign: ${err.message}`);
-    } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
   const handleToggleStatus = async (c: Campaign) => {
+    const nextStatus = c.status === 'active' ? 'paused' : 'active';
     try {
-      const newStatus = c.status === 'active' ? 'paused' : 'active';
-      await api.patch(`/campaigns/${c.id}`, { status: newStatus });
+      await api.patch(`/campaigns/${c.id}`, { status: nextStatus });
       onRefresh();
     } catch (err: any) {
-      alert(`Status update failed: ${err.message}`);
+      alert(`Failed to update campaign status: ${err.message}`);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this campaign?')) return;
+  const handleDuplicate = async (c: Campaign) => {
+    try {
+      await api.post('/campaigns', {
+        name: `${c.name} (Copy)`,
+        description: c.description,
+        type: c.type,
+        contentType: c.contentType,
+        mediaId: c.mediaId,
+        mediaUrl: c.mediaUrl,
+        targetIds: c.targetIds,
+        priority: c.priority,
+        displayDurationSeconds: c.displayDurationSeconds,
+        intervalMinutes: c.intervalMinutes,
+        daysOfWeek: c.daysOfWeek || [1, 2, 3, 4, 5, 6, 7],
+        status: 'draft',
+      });
+      onRefresh();
+    } catch (err: any) {
+      alert(`Duplicate failed: ${err.message}`);
+    }
+  };
+
+  const handleDelete = async (id: string, campName: string) => {
+    if (!confirm(`Are you sure you want to delete campaign: "${campName}"?`)) return;
     try {
       await api.delete(`/campaigns/${id}`);
       onRefresh();
@@ -162,710 +175,328 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   };
 
   return (
-    <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+    <div style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Top Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h3
-            style={{
-              fontSize: '1.3rem',
-              fontWeight: 800,
-              color: 'var(--text-main)',
-              fontFamily: 'var(--font-display)',
-            }}
-          >
-            Campaigns & Advertisement Schedules
-          </h3>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-            Choose from 3 Campaign Types: Playlist Rotation, Single Image Poster, or Only Queue Display
+          <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--dark)' }}>
+            Campaigns & Advertisements
+          </h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            Schedule and target hospital awareness campaigns, doctor introductory slides, and health camp ads.
           </p>
         </div>
+
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="btn btn-secondary" onClick={onOpenGlobalModal}>
-            <Megaphone size={16} /> 1-Click Global Ad
+          <button className="btn btn-secondary btn-sm" onClick={onOpenGlobalModal}>
+            <Megaphone size={14} />
+            <span>Instant Broadcast</span>
           </button>
-          <button className="btn btn-primary" onClick={openCreateModal}>
-            <Plus size={16} /> New Campaign
+          <button className="btn btn-primary btn-sm" onClick={openCreateModal}>
+            <Plus size={14} />
+            <span>+ Create Campaign</span>
           </button>
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="card" style={{ padding: '12px 20px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {[
+            { id: 'active', label: 'Active Campaigns', count: campaigns.filter((c) => c.status === 'active').length },
+            { id: 'scheduled', label: 'Scheduled', count: campaigns.filter((c) => c.status === 'scheduled').length },
+            { id: 'paused', label: 'Paused / Drafts', count: campaigns.filter((c) => c.status === 'paused').length },
+            { id: 'expired', label: 'Completed / Expired', count: campaigns.filter((c) => c.status === 'expired').length },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={activeTab === tab.id ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm'}
+            >
+              <span>{tab.label}</span>
+              <span
+                style={{
+                  padding: '1px 6px',
+                  borderRadius: '10px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  backgroundColor: activeTab === tab.id ? 'rgba(255, 255, 255, 0.25)' : 'var(--bg-main)',
+                  color: activeTab === tab.id ? '#FFFFFF' : 'var(--text-secondary)',
+                }}
+              >
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Campaigns Grid */}
-      {campaigns.length === 0 ? (
-        <div className="glass-card" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-          <Megaphone size={42} color="var(--primary)" style={{ margin: '0 auto 12px', opacity: 0.6 }} />
-          <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>No Campaigns Created Yet</h4>
-          <p style={{ fontSize: '0.825rem', marginTop: '4px' }}>Click "New Campaign" above to schedule playlist sequences, image ads, or queue mode.</p>
+      {filteredCampaigns.length === 0 ? (
+        <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
+          <Megaphone size={38} color="var(--text-muted)" style={{ margin: '0 auto 12px' }} />
+          <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--dark)' }}>
+            No {activeTab} campaigns found
+          </h3>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '380px', margin: '4px auto 16px' }}>
+            Create a campaign to automatically interleave medical promotional banners with patient OPD queues.
+          </p>
+          <button className="btn btn-primary btn-sm" onClick={openCreateModal}>
+            <Plus size={14} />
+            <span>Create Campaign</span>
+          </button>
         </div>
       ) : (
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
             gap: '18px',
           }}
         >
-          {campaigns.map((c) => {
-            const typeLabel =
-              c.contentType === 'only_queue'
-                ? 'Only Queue Display'
-                : c.contentType === 'playlist' || c.playlistId
-                ? 'Playlist Sequence'
-                : 'Single Image Poster';
+          {filteredCampaigns.map((camp) => {
+            const mediaItem = media.find((m) => m.id === camp.mediaId);
+            const mediaThumb = mediaItem?.url
+              ? mediaItem.url.startsWith('/')
+                ? `${getBackendBaseUrl()}${mediaItem.url}`
+                : mediaItem.url
+              : null;
+            const isActive = camp.status === 'active';
 
             return (
-            <div
-              key={c.id}
-              className="glass-card"
-              style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
-            >
               <div
+                key={camp.id}
+                className="card"
                 style={{
+                  padding: '18px',
                   display: 'flex',
+                  flexDirection: 'column',
                   justifyContent: 'space-between',
-                  alignItems: 'flex-start',
+                  gap: '14px',
                 }}
               >
                 <div>
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    <span
+                  {/* Thumbnail & Title */}
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <div
                       style={{
-                        padding: '3px 8px',
-                        borderRadius: '12px',
-                        backgroundColor: 'rgba(107, 58, 138, 0.12)',
-                        color: 'var(--primary)',
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
+                        width: '70px',
+                        height: '70px',
+                        borderRadius: 'var(--radius-sm)',
+                        backgroundColor: '#15131E',
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       }}
                     >
-                      {typeLabel}
-                    </span>
-                    <span
-                      style={{
-                        padding: '3px 8px',
-                        borderRadius: '12px',
-                        backgroundColor:
-                          c.type === 'global'
-                            ? 'rgba(16, 185, 129, 0.12)'
-                            : 'rgba(245, 158, 11, 0.12)',
-                        color: c.type === 'global' ? '#047857' : '#b45309',
-                        fontSize: '0.7rem',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                      }}
-                    >
-                      {c.type} Target
-                    </span>
+                      {mediaThumb ? (
+                        <img
+                          src={mediaThumb}
+                          alt={camp.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <ImageIcon size={24} color="#554F63" />
+                      )}
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span className={`badge ${isActive ? 'badge-online' : 'badge-neutral'}`}>
+                          <span className={`status-dot ${isActive ? 'online' : 'offline'}`} />
+                          {camp.status}
+                        </span>
+                        <span className="badge badge-purple" style={{ fontSize: '10px' }}>
+                          P-{camp.priority || 70}
+                        </span>
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: '15px',
+                          fontWeight: 700,
+                          color: 'var(--dark)',
+                          marginTop: '4px',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {camp.name}
+                      </div>
+
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        Target: {camp.type === 'global' ? 'All TVs' : camp.type}
+                      </div>
+                    </div>
                   </div>
-                  <h4
+
+                  {/* Metadata Box */}
+                  <div
                     style={{
-                      fontSize: '1.05rem',
-                      fontWeight: 800,
-                      color: 'var(--text-main)',
-                      marginTop: '8px',
+                      margin: '14px 0 0',
+                      padding: '10px 12px',
+                      backgroundColor: 'var(--bg-main)',
+                      borderRadius: 'var(--radius-sm)',
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '8px',
+                      fontSize: '11px',
                     }}
                   >
-                    {c.name}
-                  </h4>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Display Duration:</span>
+                      <div style={{ fontWeight: 600, color: 'var(--text-main)', marginTop: '1px' }}>
+                        {camp.displayDurationSeconds || 15} seconds
+                      </div>
+                    </div>
+
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Frequency:</span>
+                      <div style={{ fontWeight: 600, color: 'var(--text-main)', marginTop: '1px' }}>
+                        Every {camp.intervalMinutes || 5} min
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <button
-                  onClick={() => handleToggleStatus(c)}
+                {/* Actions Toolbar */}
+                <div
                   style={{
-                    padding: '4px 10px',
-                    borderRadius: '20px',
-                    border: 'none',
-                    backgroundColor:
-                      c.status === 'active'
-                        ? 'rgba(16, 185, 129, 0.12)'
-                        : 'rgba(239, 68, 68, 0.12)',
-                    color: c.status === 'active' ? '#047857' : '#b91c1c',
-                    fontSize: '0.725rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px',
-                  }}
-                  title="Click to toggle Active/Paused"
-                >
-                  {c.status === 'active' ? <PlayCircle size={13} /> : <PauseCircle size={13} />}
-                  {c.status.toUpperCase()}
-                </button>
-              </div>
-
-              {c.description && (
-                <p style={{ fontSize: '0.785rem', color: 'var(--text-muted)' }}>
-                  {c.description}
-                </p>
-              )}
-
-              {/* Media preview if single image */}
-              {c.mediaUrl && c.contentType !== 'only_queue' && (
-                <div
-                  style={{
-                    height: '110px',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                    backgroundImage: `url(${c.mediaUrl})`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                    border: '1px solid var(--border-color)',
-                  }}
-                />
-              )}
-
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: '0.75rem',
-                  color: 'var(--text-subtle)',
-                  marginTop: '4px',
-                }}
-              >
-                <span>Priority: <strong style={{ color: 'var(--primary)' }}>{c.priority}</strong></span>
-                <span>Targets: {c.targetIds?.includes('all') ? 'All Hospital TVs' : `${c.targetIds?.length || 1} target(s)`}</span>
-              </div>
-
-              {/* Action Buttons: Edit / Delete */}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  gap: '8px',
-                  borderTop: '1px solid var(--border-subtle)',
-                  paddingTop: '12px',
-                }}
-              >
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => openEditModal(c)}
-                >
-                  <Edit2 size={13} />
-                  <span>Edit</span>
-                </button>
-                <button
-                  className="btn btn-danger btn-sm"
-                  onClick={() => handleDelete(c.id)}
-                >
-                  <Trash2 size={13} />
-                  <span>Delete</span>
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      )}
-
-      {/* Add Campaign Modal (with 3 Campaign Types) */}
-      {showAddModal && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ padding: '26px' }}>
-            <h3
-              style={{
-                fontSize: '1.2rem',
-                fontWeight: 800,
-                color: 'var(--text-main)',
-                marginBottom: '18px',
-                fontFamily: 'var(--font-display)',
-              }}
-            >
-              Create New Signage Campaign
-            </h3>
-            <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Campaign Title
-                </label>
-                <input
-                  type="text"
-                  className="input-field"
-                  placeholder="e.g. Free Eye Checkup Camp, Heart Health Week..."
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
-
-              {/* 3 Campaign Types Selection */}
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
-                  Campaign Type (Display Mode)
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setCampaignContentType('playlist')}
-                    style={{
-                      padding: '12px 10px',
-                      borderRadius: '10px',
-                      border:
-                        campaignContentType === 'playlist'
-                          ? '2px solid var(--primary)'
-                          : '1px solid var(--border-color)',
-                      backgroundColor:
-                        campaignContentType === 'playlist'
-                          ? 'rgba(107, 58, 138, 0.12)'
-                          : '#FFFFFF',
-                      color:
-                        campaignContentType === 'playlist'
-                          ? 'var(--primary)'
-                          : 'var(--text-main)',
-                      fontWeight: 700,
-                      fontSize: '0.8rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <ListVideo size={20} />
-                    <span>Playlist</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setCampaignContentType('single_image')}
-                    style={{
-                      padding: '12px 10px',
-                      borderRadius: '10px',
-                      border:
-                        campaignContentType === 'single_image'
-                          ? '2px solid var(--primary)'
-                          : '1px solid var(--border-color)',
-                      backgroundColor:
-                        campaignContentType === 'single_image'
-                          ? 'rgba(107, 58, 138, 0.12)'
-                          : '#FFFFFF',
-                      color:
-                        campaignContentType === 'single_image'
-                          ? 'var(--primary)'
-                          : 'var(--text-main)',
-                      fontWeight: 700,
-                      fontSize: '0.8rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <ImageIcon size={20} />
-                    <span>Image + Queue</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setCampaignContentType('single_image_only')}
-                    style={{
-                      padding: '12px 10px',
-                      borderRadius: '10px',
-                      border:
-                        campaignContentType === 'single_image_only'
-                          ? '2px solid var(--primary)'
-                          : '1px solid var(--border-color)',
-                      backgroundColor:
-                        campaignContentType === 'single_image_only'
-                          ? 'rgba(107, 58, 138, 0.12)'
-                          : '#FFFFFF',
-                      color:
-                        campaignContentType === 'single_image_only'
-                          ? 'var(--primary)'
-                          : 'var(--text-main)',
-                      fontWeight: 700,
-                      fontSize: '0.8rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <ImageIcon size={20} />
-                    <span>Solo Image Ad</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setCampaignContentType('only_queue')}
-                    style={{
-                      padding: '12px 10px',
-                      borderRadius: '10px',
-                      border:
-                        campaignContentType === 'only_queue'
-                          ? '2px solid var(--primary)'
-                          : '1px solid var(--border-color)',
-                      backgroundColor:
-                        campaignContentType === 'only_queue'
-                          ? 'rgba(107, 58, 138, 0.12)'
-                          : '#FFFFFF',
-                      color:
-                        campaignContentType === 'only_queue'
-                          ? 'var(--primary)'
-                          : 'var(--text-main)',
-                      fontWeight: 700,
-                      fontSize: '0.8rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <Tv size={20} />
-                    <span>Only Queue</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Conditional Content Inputs based on Campaign Type */}
-              {campaignContentType === 'playlist' && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                    Select Display Playlist
-                  </label>
-                  <select
-                    className="input-field"
-                    value={selectedPlaylistId}
-                    onChange={(e) => setSelectedPlaylistId(e.target.value)}
-                  >
-                    {playlists.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.items.length} slides)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {(campaignContentType === 'single_image' || campaignContentType === 'single_image_only') && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                    Select Image from Media Assets
-                  </label>
-                  <select
-                    className="input-field"
-                    value={selectedMediaId}
-                    onChange={(e) => setSelectedMediaId(e.target.value)}
-                  >
-                    {media.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {campaignContentType === 'only_queue' && (
-                <div
-                  style={{
-                    padding: '12px 14px',
-                    borderRadius: '8px',
-                    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-                    color: '#065f46',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
+                    justifyContent: 'space-between',
+                    paddingTop: '12px',
+                    borderTop: '1px solid var(--border)',
                   }}
                 >
-                  ✓ "Only Queue" mode ensures uninterrupted live patient OPD token screen display on targeted TV screens without advertisement interruptions.
-                </div>
-              )}
-
-              {/* Target Scope */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                    Broadcast Target Scope
-                  </label>
-                  <select
-                    className="input-field"
-                    value={targetScope}
-                    onChange={(e) => setTargetScope(e.target.value as any)}
-                  >
-                    <option value="global">All Hospital TVs (Global)</option>
-                    <option value="department">Specific Department</option>
-                    <option value="screen">Specific TV Screen</option>
-                  </select>
-                </div>
-
-                {targetScope === 'department' && (
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                      Select Department
-                    </label>
-                    <select
-                      className="input-field"
-                      value={targetId}
-                      onChange={(e) => setTargetId(e.target.value)}
-                      required
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={() => handleToggleStatus(camp)}
+                      title={isActive ? 'Pause Campaign' : 'Start Campaign'}
                     >
-                      <option value="">Choose Department</option>
-                      {departments.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                      {isActive ? <Pause size={13} color="var(--warning)" /> : <Play size={13} color="var(--success)" />}
+                    </button>
 
-                {targetScope === 'screen' && (
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                      Select TV Screen
-                    </label>
-                    <select
-                      className="input-field"
-                      value={targetId}
-                      onChange={(e) => setTargetId(e.target.value)}
-                      required
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={() => openEditModal(camp)}
+                      title="Edit Campaign"
                     >
-                      <option value="">Choose Screen</option>
-                      {screens.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({s.code})
-                        </option>
-                      ))}
-                    </select>
+                      <Edit2 size={13} />
+                    </button>
+
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={() => handleDuplicate(camp)}
+                      title="Duplicate Campaign"
+                    >
+                      <Copy size={13} />
+                    </button>
+
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => handleDelete(camp.id, camp.name)}
+                      style={{ color: 'var(--danger)' }}
+                      title="Delete Campaign"
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
-                )}
-              </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Priority (10 - 100)
-                </label>
-                <input
-                  type="number"
-                  className="input-field"
-                  value={priority}
-                  onChange={(e) => setPriority(Number(e.target.value))}
-                  min={10}
-                  max={100}
-                />
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    Created {new Date(camp.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
               </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowAddModal(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? 'Creating...' : 'Create Campaign'}
-                </button>
-              </div>
-            </form>
-          </div>
+            );
+          })}
         </div>
       )}
 
-      {/* Edit Campaign Modal (Requested by User) */}
-      {editingCampaign && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ padding: '26px' }}>
-            <h3
-              style={{
-                fontSize: '1.2rem',
-                fontWeight: 800,
-                color: 'var(--text-main)',
-                marginBottom: '18px',
-                fontFamily: 'var(--font-display)',
-              }}
-            >
-              Edit Campaign: {editingCampaign.name}
-            </h3>
-            <form onSubmit={handleUpdate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Campaign Title
-                </label>
-                <input
-                  type="text"
-                  className="input-field"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
+      {/* Create / Edit Campaign Modal */}
+      {(showCreateModal || editingCampaign) && (
+        <div className="modal-overlay" onClick={() => { setShowCreateModal(false); setEditingCampaign(null); }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '560px' }}>
+            <div className="modal-header">
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--dark)' }}>
+                {editingCampaign ? 'Edit Campaign' : 'Create New Campaign'}
+              </h3>
+              <button
+                className="btn-ghost"
+                onClick={() => { setShowCreateModal(false); setEditingCampaign(null); }}
+                style={{ padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-              {/* 3 Campaign Types Selection */}
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
-                  Campaign Type (3 Modes)
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setCampaignContentType('playlist')}
-                    style={{
-                      padding: '12px 10px',
-                      borderRadius: '10px',
-                      border:
-                        campaignContentType === 'playlist'
-                          ? '2px solid var(--primary)'
-                          : '1px solid var(--border-color)',
-                      backgroundColor:
-                        campaignContentType === 'playlist'
-                          ? 'rgba(107, 58, 138, 0.12)'
-                          : '#FFFFFF',
-                      color:
-                        campaignContentType === 'playlist'
-                          ? 'var(--primary)'
-                          : 'var(--text-main)',
-                      fontWeight: 700,
-                      fontSize: '0.8rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <ListVideo size={20} />
-                    <span>Playlist</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setCampaignContentType('single_image')}
-                    style={{
-                      padding: '12px 10px',
-                      borderRadius: '10px',
-                      border:
-                        campaignContentType === 'single_image'
-                          ? '2px solid var(--primary)'
-                          : '1px solid var(--border-color)',
-                      backgroundColor:
-                        campaignContentType === 'single_image'
-                          ? 'rgba(107, 58, 138, 0.12)'
-                          : '#FFFFFF',
-                      color:
-                        campaignContentType === 'single_image'
-                          ? 'var(--primary)'
-                          : 'var(--text-main)',
-                      fontWeight: 700,
-                      fontSize: '0.8rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <ImageIcon size={20} />
-                    <span>Single Image</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setCampaignContentType('only_queue')}
-                    style={{
-                      padding: '12px 10px',
-                      borderRadius: '10px',
-                      border:
-                        campaignContentType === 'only_queue'
-                          ? '2px solid var(--primary)'
-                          : '1px solid var(--border-color)',
-                      backgroundColor:
-                        campaignContentType === 'only_queue'
-                          ? 'rgba(107, 58, 138, 0.12)'
-                          : '#FFFFFF',
-                      color:
-                        campaignContentType === 'only_queue'
-                          ? 'var(--primary)'
-                          : 'var(--text-main)',
-                      fontWeight: 700,
-                      fontSize: '0.8rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <Tv size={20} />
-                    <span>Only Queue</span>
-                  </button>
+            <form onSubmit={handleSaveCampaign}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Campaign Name</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Free Cardiology Checkup Camp"
+                    required
+                  />
                 </div>
-              </div>
 
-              {campaignContentType === 'playlist' && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                    Select Display Playlist
-                  </label>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Media Asset</label>
                   <select
-                    className="input-field"
-                    value={selectedPlaylistId}
-                    onChange={(e) => setSelectedPlaylistId(e.target.value)}
-                  >
-                    {playlists.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.items.length} slides)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {campaignContentType === 'single_image' && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                    Select Image from Media Assets
-                  </label>
-                  <select
-                    className="input-field"
+                    className="form-select"
                     value={selectedMediaId}
                     onChange={(e) => setSelectedMediaId(e.target.value)}
+                    required
                   >
                     {media.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.title}
+                        {m.title} ({m.type.toUpperCase()})
                       </option>
                     ))}
                   </select>
                 </div>
-              )}
 
-              {/* Target Scope */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                    Broadcast Target Scope
-                  </label>
-                  <select
-                    className="input-field"
-                    value={targetScope}
-                    onChange={(e) => setTargetScope(e.target.value as any)}
-                  >
-                    <option value="global">All Hospital TVs (Global)</option>
-                    <option value="department">Specific Department</option>
-                    <option value="screen">Specific TV Screen</option>
-                  </select>
+                  <label className="form-label">Target Scope</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                    {(['all', 'department', 'screen'] as const).map((sc) => (
+                      <button
+                        key={sc}
+                        type="button"
+                        onClick={() => {
+                          setTargetScope(sc);
+                          if (sc === 'all') setTargetId('all');
+                          else if (sc === 'department') setTargetId(departments[0]?.id || '');
+                          else setTargetId(screens[0]?.id || '');
+                        }}
+                        className={targetScope === sc ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm'}
+                      >
+                        {sc === 'all' ? 'All TVs' : sc === 'department' ? 'Department' : 'Single Screen'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {targetScope === 'department' && (
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                      Select Department
-                    </label>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Select Department</label>
                     <select
-                      className="input-field"
+                      className="form-select"
                       value={targetId}
                       onChange={(e) => setTargetId(e.target.value)}
+                      required
                     >
-                      <option value="">Choose Department</option>
                       {departments.map((d) => (
                         <option key={d.id} value={d.id}>
-                          {d.name}
+                          {d.name} ({d.code})
                         </option>
                       ))}
                     </select>
@@ -873,50 +504,83 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                 )}
 
                 {targetScope === 'screen' && (
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                      Select TV Screen
-                    </label>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Select Screen</label>
                     <select
-                      className="input-field"
+                      className="form-select"
                       value={targetId}
                       onChange={(e) => setTargetId(e.target.value)}
+                      required
                     >
-                      <option value="">Choose Screen</option>
                       {screens.map((s) => (
                         <option key={s.id} value={s.id}>
-                          {s.name} ({s.code})
+                          {s.name} ({s.location})
                         </option>
                       ))}
                     </select>
                   </div>
                 )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label className="form-label">Display Duration (seconds)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={duration}
+                      onChange={(e) => setDuration(Number(e.target.value))}
+                      min={5}
+                      max={180}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label">Interval (minutes)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={intervalMinutes}
+                      onChange={(e) => setIntervalMinutes(Number(e.target.value))}
+                      min={1}
+                      max={60}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="form-label">Priority (1-100, Higher = Precedence)</label>
+                  <input
+                    type="range"
+                    min={10}
+                    max={100}
+                    value={priority}
+                    onChange={(e) => setPriority(Number(e.target.value))}
+                    style={{ width: '100%', accentColor: 'var(--primary)' }}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    <span>Standard (50)</span>
+                    <span style={{ fontWeight: 700, color: 'var(--primary)' }}>Current: {priority}</span>
+                    <span>High (90)</span>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Priority (10 - 100)
-                </label>
-                <input
-                  type="number"
-                  className="input-field"
-                  value={priority}
-                  onChange={(e) => setPriority(Number(e.target.value))}
-                  min={10}
-                  max={100}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+              <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setEditingCampaign(null)}
+                  className="btn btn-outline btn-sm"
+                  onClick={() => { setShowCreateModal(false); setEditingCampaign(null); }}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? 'Saving...' : 'Save Campaign'}
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-sm"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Saving...' : editingCampaign ? 'Save Changes' : 'Publish Campaign'}
                 </button>
               </div>
             </form>

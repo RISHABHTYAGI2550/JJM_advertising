@@ -1,7 +1,24 @@
-import React, { useState } from 'react';
-import { X, RefreshCw, Send, Trash2, ExternalLink, Tv, Play, Pause, Power } from 'lucide-react';
-import { Screen, Department } from '../types';
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  RefreshCw,
+  ExternalLink,
+  Tv,
+  Play,
+  RotateCcw,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  Layers,
+  Radio,
+  Sliders,
+  ShieldAlert,
+  Send,
+  Zap,
+} from 'lucide-react';
+import { Screen, Department, DeviceCommand, CommandType } from '../types';
 import { api } from '../services/api';
+import { getSocket } from '../services/socket';
 
 interface ScreenDetailModalProps {
   screen: Screen | null;
@@ -20,17 +37,82 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
 }) => {
   if (!isOpen || !screen) return null;
 
+  const [activeTab, setActiveTab] = useState<'control' | 'commands' | 'settings'>('control');
   const [queueUrl, setQueueUrl] = useState(screen.queueUrl);
   const [name, setName] = useState(screen.name);
   const [departmentId, setDepartmentId] = useState(screen.departmentId);
   const [location, setLocation] = useState(screen.location);
-  const [loading, setLoading] = useState(false);
+  const [staleThreshold, setStaleThreshold] = useState(screen.staleThresholdSeconds || 180);
+
+  const [isUpdating, setIsUpdating] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  const dept = departments.find((d) => d.id === screen.departmentId);
+  // Command Execution State
+  const [activeCommand, setActiveCommand] = useState<DeviceCommand | null>(null);
+  const [recentCommands, setRecentCommands] = useState<DeviceCommand[]>([]);
+  const [isExecutingCommand, setIsExecutingCommand] = useState<string | null>(null);
 
-  const handleUpdate = async () => {
-    setLoading(true);
+  const dept = departments.find((d) => d.id === screen.departmentId);
+  const isOnline = screen.connectionStatus === 'online';
+
+  const fetchRecentCommands = async () => {
+    try {
+      const res = await api.get(`/screens/${screen.id}/commands`);
+      if (res.data.success && res.data.commands) {
+        setRecentCommands(res.data.commands);
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    fetchRecentCommands();
+
+    const socket = getSocket();
+    const handleCommandUpdate = (data: any) => {
+      if (data.screenId === screen.id) {
+        setActiveCommand((prev) => {
+          if (prev && prev.id === data.commandId) {
+            return { ...prev, status: data.status, errorMessage: data.errorMessage };
+          }
+          return prev;
+        });
+        fetchRecentCommands();
+        if (data.status === 'ACKNOWLEDGED') {
+          onRefreshList();
+        }
+      }
+    };
+
+    socket.on('command:status_updated', handleCommandUpdate);
+    return () => {
+      socket.off('command:status_updated', handleCommandUpdate);
+    };
+  }, [screen.id]);
+
+  const dispatchCommand = async (type: CommandType, payload: any = {}) => {
+    setIsExecutingCommand(type);
+    setFeedback(null);
+    try {
+      const res = await api.post(`/screens/${screen.id}/command`, {
+        commandType: type,
+        payload,
+      });
+
+      if (res.data.success && res.data.command) {
+        setActiveCommand(res.data.command);
+        fetchRecentCommands();
+        setFeedback(`Command "${type}" dispatched with ID: ${res.data.command.id}`);
+      }
+    } catch (err: any) {
+      setFeedback(`Dispatch error: ${err.message}`);
+    } finally {
+      setIsExecutingCommand(null);
+    }
+  };
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsUpdating(true);
     setFeedback(null);
     try {
       await api.patch(`/screens/${screen.id}`, {
@@ -38,399 +120,440 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
         queueUrl,
         departmentId,
         location,
+        staleThresholdSeconds: Number(staleThreshold),
       });
-      setFeedback('Screen configuration updated and broadcasted to TV!');
+      setFeedback('Screen settings successfully updated.');
       onRefreshList();
-      setTimeout(() => {
-        setFeedback(null);
-        onClose();
-      }, 1200);
     } catch (err: any) {
-      setFeedback(`Error: ${err.message}`);
+      setFeedback(`Update failed: ${err.message}`);
     } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRemoteRefresh = async () => {
-    try {
-      await api.post(`/screens/${screen.id}/refresh`);
-      setFeedback('Remote refresh command sent to screen!');
-    } catch (err: any) {
-      setFeedback(`Error: ${err.message}`);
-    }
-  };
-
-  const handleTestDisplay = async () => {
-    try {
-      await api.post(`/screens/${screen.id}/test-content`, {
-        message: 'JJM Hospital Control Center Test Notification',
-      });
-      setFeedback('Test display trigger sent to screen!');
-    } catch (err: any) {
-      setFeedback(`Error: ${err.message}`);
-    }
-  };
-
-  const handleUnpair = async () => {
-    if (
-      !confirm(
-        'Are you sure you want to unpair this TV? The TV will return to the pairing code screen.'
-      )
-    ) {
-      return;
-    }
-    try {
-      await api.post(`/screens/${screen.id}/unpair`);
-      onRefreshList();
-      onClose();
-    } catch (err: any) {
-      alert(`Failed to unpair: ${err.message}`);
-    }
-  };
-
-  const handleTogglePause = async () => {
-    if (!screen) return;
-    setLoading(true);
-    try {
-      const res = await api.post(`/screens/${screen.id}/toggle-pause`);
-      if (res.data.success) {
-        setFeedback(`TV playback ${res.data.isPaused ? 'PAUSED (Queue Only)' : 'RESUMED'} in real time!`);
-        onRefreshList();
-      }
-    } catch (err: any) {
-      setFeedback(`Error toggling playback: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleTogglePower = async () => {
-    if (!screen) return;
-    setLoading(true);
-    try {
-      const next = screen.powerState === 'off' ? 'on' : 'off';
-      const res = await api.post(`/screens/${screen.id}/power`, { state: next });
-      if (res.data.success) {
-        setFeedback(`TV screen display turned ${res.data.powerState === 'off' ? 'OFF (Standby)' : 'ON (Active)'}!`);
-        onRefreshList();
-      }
-    } catch (err: any) {
-      setFeedback(`Error toggling power: ${err.message}`);
-    } finally {
-      setLoading(false);
+      setIsUpdating(false);
     }
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-content" style={{ padding: '28px', maxWidth: '640px' }}>
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        className="modal-content"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: '780px', width: '95%' }}
+      >
         {/* Header */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '20px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div className="modal-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div
               style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '12px',
-                background:
-                  'linear-gradient(135deg, rgba(107, 58, 138, 0.15) 0%, rgba(157, 107, 186, 0.22) 100%)',
+                width: '38px',
+                height: '38px',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--primary-subtle)',
+                color: 'var(--primary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <Tv size={24} color="#6B3A8A" />
+              <Tv size={20} />
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <h3
-                  style={{
-                    fontSize: '1.2rem',
-                    fontWeight: 800,
-                    color: 'var(--text-main)',
-                    fontFamily: 'var(--font-display)',
-                  }}
-                >
+                <h3 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--dark)' }}>
                   {screen.name}
                 </h3>
-                <span className={`status-badge ${screen.connectionStatus}`}>
-                  <span
-                    className={
-                      screen.connectionStatus === 'online'
-                        ? 'pulse-dot-online'
-                        : 'pulse-dot-offline'
-                    }
-                  />
-                  {screen.connectionStatus}
+                <span className={`badge ${isOnline ? 'badge-online' : 'badge-offline'}`}>
+                  <span className={`status-dot ${isOnline ? 'online' : 'offline'}`} />
+                  {isOnline ? 'Online' : 'Offline'}
                 </span>
               </div>
-              <p style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-                Screen ID: <code style={{ color: 'var(--primary)' }}>{screen.id}</code> •{' '}
-                {dept?.name || 'Department'}
-              </p>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                {dept?.name || 'Department'} • {screen.location} • Code: {screen.code}
+              </div>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-subtle)',
-              cursor: 'pointer',
-            }}
-          >
+
+          <button className="btn-ghost" onClick={onClose} style={{ padding: '4px' }}>
             <X size={20} />
           </button>
         </div>
 
-        {feedback && (
-          <div
-            style={{
-              padding: '12px 14px',
-              borderRadius: '10px',
-              backgroundColor: feedback.startsWith('Error')
-                ? 'var(--danger-light)'
-                : 'var(--success-light)',
-              color: feedback.startsWith('Error') ? '#991b1b' : '#065f46',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              marginBottom: '18px',
-            }}
-          >
-            {feedback}
-          </div>
-        )}
-
-        {/* Remote Control Actions */}
+        {/* Tab Navigation */}
         <div
           style={{
-            padding: '14px 16px',
-            borderRadius: '12px',
-            backgroundColor: 'var(--bg-subtle)',
-            border: '1px solid var(--border-color)',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '20px',
-            flexWrap: 'wrap',
-            gap: '10px',
+            borderBottom: '1px solid var(--border)',
+            padding: '0 24px',
+            backgroundColor: '#FAF8FC',
+            gap: '8px',
           }}
         >
-          <div>
-            <div style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-main)' }}>
-              Real-time Remote Control
-            </div>
-            <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)' }}>
-              Send instant commands to the running TV kiosk
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {[
+            { id: 'control', label: 'Live Control & Preview' },
+            { id: 'commands', label: '5-Stage Command Timeline' },
+            { id: 'settings', label: 'Configuration' },
+          ].map((tab) => (
             <button
-              className={`btn btn-sm ${screen.isPaused ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={handleTogglePause}
-              disabled={loading}
-              title={screen.isPaused ? 'Resume Screen Playback' : 'Pause Screen Playback'}
-              style={
-                screen.isPaused
-                  ? { backgroundColor: '#10B981', borderColor: '#10B981', color: '#fff' }
-                  : { color: '#DC2626', borderColor: 'rgba(220, 38, 38, 0.3)' }
-              }
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              style={{
+                padding: '12px 14px',
+                border: 'none',
+                background: 'none',
+                fontSize: '13px',
+                fontWeight: activeTab === tab.id ? 700 : 500,
+                color: activeTab === tab.id ? 'var(--primary)' : 'var(--text-secondary)',
+                borderBottom: activeTab === tab.id ? '2px solid var(--primary)' : '2px solid transparent',
+                cursor: 'pointer',
+              }}
             >
-              {screen.isPaused ? (
-                <Play size={13} fill="currentColor" />
-              ) : (
-                <Pause size={13} fill="currentColor" />
-              )}
-              <span>{screen.isPaused ? 'Resume Ads' : 'Pause Ads (Queue Only)'}</span>
+              {tab.label}
             </button>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={handleTogglePower}
-              disabled={loading}
-              title={screen.powerState === 'off' ? 'Wake screen display' : 'Turn screen display OFF (Standby)'}
-              style={{ color: screen.powerState === 'off' ? '#10B981' : '#64748B' }}
-            >
-              <Power size={13} />
-              <span>{screen.powerState === 'off' ? 'Wake TV' : 'Screen OFF'}</span>
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={handleRemoteRefresh}>
-              <RefreshCw size={13} /> Refresh TV
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={handleTestDisplay}>
-              <Send size={13} /> Test Display
-            </button>
-          </div>
+          ))}
         </div>
 
-        {/* Form Fields for Editing Screen */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.775rem',
-                fontWeight: 700,
-                color: 'var(--text-main)',
-                marginBottom: '6px',
-              }}
-            >
-              Screen Display Name
-            </label>
-            <input
-              type="text"
-              className="input-field"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
+        {/* Modal Body */}
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          {/* Tab 1: Live Control & Preview */}
+          {activeTab === 'control' && (
+            <>
+              {/* Live TV Preview Frame */}
+              <div className="tv-preview-frame">
+                <div className="tv-preview-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#FFFFFF', fontWeight: 600 }}>
+                    <span className={`status-dot ${isOnline ? 'online' : 'offline'}`} />
+                    <span>Now Playing: {screen.currentContent === 'queue' ? 'Doctor OPD Queue' : screen.currentContent || 'Queue'}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <a
+                      href={`/display/${screen.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: '#EF5A7C', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}
+                    >
+                      <span>Launch Public TV Display</span>
+                      <ExternalLink size={11} />
+                    </a>
+                    {screen.queueUrl && (
+                      <a
+                        href={screen.queueUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: '#C8BED1', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <span>Open HMS</span>
+                        <ExternalLink size={11} />
+                      </a>
+                    )}
+                  </div>
+                </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <div>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: '0.775rem',
-                  fontWeight: 700,
-                  color: 'var(--text-main)',
-                  marginBottom: '6px',
-                }}
-              >
-                Department / Ward
-              </label>
-              <select
-                className="input-field"
-                value={departmentId}
-                onChange={(e) => setDepartmentId(e.target.value)}
-              >
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: '0.775rem',
-                  fontWeight: 700,
-                  color: 'var(--text-main)',
-                  marginBottom: '6px',
-                }}
-              >
-                Physical Location / Room
-              </label>
-              <input
-                type="text"
-                className="input-field"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.775rem',
-                fontWeight: 700,
-                color: 'var(--text-main)',
-                marginBottom: '6px',
-              }}
-            >
-              Doctor HMS Live Queue URL
-            </label>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input
-                type="url"
-                className="input-field"
-                value={queueUrl}
-                onChange={(e) => setQueueUrl(e.target.value)}
-              />
-              {queueUrl && (
-                <a
-                  href={queueUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn btn-secondary"
-                  style={{ textDecoration: 'none', padding: '0 12px' }}
-                  title="Open Queue in New Tab"
+                <div
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#111019',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    position: 'relative',
+                  }}
                 >
-                  <ExternalLink size={16} />
-                </a>
-              )}
-            </div>
-          </div>
+                  {screen.latestSnapshot ? (
+                    <img
+                      src={screen.latestSnapshot}
+                      alt="Screen Live Feed"
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    />
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '20px' }}>
+                      <Tv size={32} color="#454054" style={{ margin: '0 auto 8px' }} />
+                      <div style={{ color: '#E4DFEC', fontSize: '14px', fontWeight: 600 }}>
+                        {screen.queueUrl ? 'Doctor OPD Queue Display Active' : 'No Content Assigned'}
+                      </div>
+                      <div style={{ color: '#888296', fontSize: '12px', marginTop: '2px' }}>
+                        {screen.queueUrl}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
 
-          {/* Telemetry info */}
-          <div
-            style={{
-              padding: '12px 14px',
-              borderRadius: '10px',
-              backgroundColor: 'var(--bg-subtle)',
-              border: '1px solid var(--border-color)',
-              fontSize: '0.75rem',
-              color: 'var(--text-muted)',
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '8px',
-            }}
-          >
-            <div>
-              <strong style={{ color: 'var(--text-main)' }}>Last Sync:</strong>{' '}
-              {screen.lastHeartbeat
-                ? new Date(screen.lastHeartbeat).toLocaleTimeString()
-                : 'Never connected'}
+              {/* Mode Controls */}
+              <div>
+                <label className="form-label">Immediate Playback Override</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => dispatchCommand('RELOAD_QUEUE', { force: true })}
+                    disabled={!!isExecutingCommand}
+                  >
+                    <RefreshCw size={13} className={isExecutingCommand === 'RELOAD_QUEUE' ? 'spin' : ''} />
+                    <span>Play Queue</span>
+                  </button>
+
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => dispatchCommand('PLAY_CAMPAIGN', { content: 'ad' })}
+                    disabled={!!isExecutingCommand}
+                  >
+                    <Play size={13} />
+                    <span>Play Ad</span>
+                  </button>
+
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => dispatchCommand('SYNC_CONFIG')}
+                    disabled={!!isExecutingCommand}
+                  >
+                    <Layers size={13} />
+                    <span>Sync State</span>
+                  </button>
+
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={() =>
+                      dispatchCommand('EMERGENCY_OVERRIDE', {
+                        title: 'HOSPITAL OVERRIDE TEST',
+                        message: 'Emergency priority broadcast test active.',
+                        durationSeconds: 10,
+                      })
+                    }
+                    disabled={!!isExecutingCommand}
+                  >
+                    <ShieldAlert size={13} />
+                    <span>Emergency Alert</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Device System Controls */}
+              <div>
+                <label className="form-label">Device Maintenance Controls</label>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => dispatchCommand('RESTART_PLAYER', { force: true })}
+                    disabled={!!isExecutingCommand}
+                  >
+                    <RotateCcw size={13} />
+                    <span>Restart TV Player</span>
+                  </button>
+
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => dispatchCommand('TAKE_SNAPSHOT')}
+                    disabled={!!isExecutingCommand}
+                  >
+                    <Tv size={13} />
+                    <span>Capture Snapshot</span>
+                  </button>
+
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => dispatchCommand('CLEAR_CACHE')}
+                    disabled={!!isExecutingCommand}
+                  >
+                    <span>Clear Local Cache</span>
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Tab 2: 5-Stage Command Execution Timeline */}
+          {activeTab === 'commands' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                Audited transactional execution timeline across 5 handshake stages:
+              </div>
+
+              {/* Active Command Stage Indicator */}
+              {activeCommand && (
+                <div
+                  style={{
+                    padding: '14px',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: 'var(--bg-subtle)',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--dark)' }}>
+                      Active: {activeCommand.commandType} ({activeCommand.id})
+                    </span>
+                    <span className="badge badge-purple">{activeCommand.status}</span>
+                  </div>
+
+                  {/* 5-Stage Visual Stepper */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', textAlign: 'center' }}>
+                    {['CREATED', 'SENT', 'RECEIVED', 'APPLIED', 'ACKNOWLEDGED'].map((stage, i) => {
+                      const stages = ['CREATED', 'SENT', 'RECEIVED', 'APPLIED', 'ACKNOWLEDGED'];
+                      const currentIdx = stages.indexOf(activeCommand.status);
+                      const isPastOrCurrent = currentIdx >= i;
+
+                      return (
+                        <div
+                          key={stage}
+                          style={{
+                            padding: '6px 2px',
+                            borderRadius: '4px',
+                            backgroundColor: isPastOrCurrent ? 'var(--primary)' : '#EDE8F2',
+                            color: isPastOrCurrent ? '#FFFFFF' : 'var(--text-muted)',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {stage}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Recent Commands Table */}
+              <div className="table-container">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Command</th>
+                      <th>Status</th>
+                      <th>Duration</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentCommands.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px' }}>
+                          No commands dispatched yet
+                        </td>
+                      </tr>
+                    ) : (
+                      recentCommands.map((cmd) => (
+                        <tr key={cmd.id}>
+                          <td>{new Date(cmd.createdAt).toLocaleTimeString()}</td>
+                          <td>
+                            <div style={{ fontWeight: 600, color: 'var(--dark)' }}>{cmd.commandType}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{cmd.id}</div>
+                          </td>
+                          <td>
+                            <span
+                              className={`badge ${
+                                cmd.status === 'ACKNOWLEDGED'
+                                  ? 'badge-online'
+                                  : cmd.status === 'FAILED'
+                                  ? 'badge-offline'
+                                  : 'badge-purple'
+                              }`}
+                            >
+                              {cmd.status}
+                            </span>
+                          </td>
+                          <td>
+                            {cmd.acknowledgedAt && cmd.sentAt
+                              ? `${new Date(cmd.acknowledgedAt).getTime() - new Date(cmd.sentAt).getTime()}ms`
+                              : '-'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div>
-              <strong style={{ color: 'var(--text-main)' }}>Player Version:</strong>{' '}
-              {screen.playerVersion || '1.0.0'}
+          )}
+
+          {/* Tab 3: Settings Form */}
+          {activeTab === 'settings' && (
+            <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">TV Name</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Location</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Department</label>
+                <select
+                  className="form-select"
+                  value={departmentId}
+                  onChange={(e) => setDepartmentId(e.target.value)}
+                  required
+                >
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Doctor OPD Queue URL</label>
+                <input
+                  type="url"
+                  className="form-input"
+                  value={queueUrl}
+                  onChange={(e) => setQueueUrl(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Queue Staleness Threshold (seconds)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={staleThreshold}
+                  onChange={(e) => setStaleThreshold(Number(e.target.value))}
+                  min={30}
+                  max={1200}
+                />
+              </div>
+
+              <button type="submit" className="btn btn-primary" disabled={isUpdating}>
+                {isUpdating ? 'Saving...' : 'Save Configuration'}
+              </button>
+            </form>
+          )}
+
+          {feedback && (
+            <div
+              style={{
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '12px',
+                fontWeight: 500,
+                backgroundColor: feedback.includes('error') ? 'var(--danger-subtle)' : 'var(--success-subtle)',
+                color: feedback.includes('error') ? 'var(--danger)' : '#0E805E',
+                border: `1px solid ${feedback.includes('error') ? '#F8C8CB' : '#C4F0E1'}`,
+              }}
+            >
+              {feedback}
             </div>
-            <div>
-              <strong style={{ color: 'var(--text-main)' }}>Current Content:</strong>{' '}
-              <span style={{ textTransform: 'capitalize', color: 'var(--primary)', fontWeight: 700 }}>
-                {screen.currentContent}
-              </span>
-            </div>
-            <div>
-              <strong style={{ color: 'var(--text-main)' }}>Device Token:</strong>{' '}
-              {screen.deviceToken ? 'Bound & Active' : 'Pending pairing'}
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* Modal Actions */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginTop: '24px',
-            borderTop: '1px solid var(--border-color)',
-            paddingTop: '16px',
-          }}
-        >
-          <button className="btn btn-danger btn-sm" onClick={handleUnpair}>
-            <Trash2 size={13} /> Unpair Screen
+        {/* Footer */}
+        <div className="modal-footer">
+          <button className="btn btn-outline btn-sm" onClick={onClose}>
+            Close
           </button>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="btn btn-secondary" onClick={onClose}>
-              Cancel
-            </button>
-            <button className="btn btn-primary" onClick={handleUpdate} disabled={loading}>
-              {loading ? 'Saving...' : 'Save & Push to TV'}
-            </button>
-          </div>
         </div>
       </div>
     </div>

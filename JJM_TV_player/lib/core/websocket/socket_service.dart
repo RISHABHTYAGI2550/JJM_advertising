@@ -10,23 +10,30 @@ class SocketService {
   static Timer? _heartbeatTimer;
   static String? _currentScreenId;
   static String? _currentContent = 'queue';
+  static int _appliedConfigVersion = 0;
+  static int _mediaManifestVersion = 1;
+  static bool _queueConnected = true;
+  static DateTime _queueLastUpdateAt = DateTime.now();
 
   static Function(ResolvedConfig)? onConfigUpdate;
-  static Function(String)? onTestCommand;
+  static Function()? onReconcileRequested;
+  static Function(String commandId, String commandType, dynamic payload)? onCommandReceived;
   static Function()? onUnpaired;
   static Function(bool isConnected)? onConnectionChanged;
-  static Function(bool isPaused)? onPlaybackCommand;
-  static Function(bool isPowerOn)? onPowerCommand;
-  static Function()? onRequestSnapshot;
   static Function(Map<String, dynamic>? announcement)? onEmergencyUpdate;
+  static Function()? onRequestSnapshot;
 
   static Future<void> init({
     String? screenId,
     String? deviceToken,
     String? pairingCode,
+    int appliedConfigVersion = 0,
+    int mediaManifestVersion = 1,
     Function(Map<String, dynamic>)? onPaired,
   }) async {
     _currentScreenId = screenId;
+    _appliedConfigVersion = appliedConfigVersion;
+    _mediaManifestVersion = mediaManifestVersion;
     final baseUrl = await ApiService.getBaseUrl();
 
     disconnect();
@@ -50,8 +57,13 @@ class SocketService {
           _socket!.emit('screen:register', {
             'screenId': _currentScreenId,
             'deviceToken': deviceToken,
+            'appVersion': AppConfig.appVersion,
+            'configVersion': _appliedConfigVersion,
           });
           _startHeartbeat();
+
+          // Trigger authoritative REST reconciliation after socket reconnect
+          onReconcileRequested?.call();
         }
       });
 
@@ -68,7 +80,7 @@ class SocketService {
         });
       }
 
-      // Listen for live display configuration updates
+      // Live configuration push
       _socket!.on('config:update', (data) {
         if (data != null && data['config'] != null && onConfigUpdate != null) {
           final config = ResolvedConfig.fromJson(data['config']);
@@ -77,121 +89,129 @@ class SocketService {
         }
       });
 
-      // Listen for refresh command
-      _socket!.on('command:refresh', (data) {
-        if (data != null && data['config'] != null && onConfigUpdate != null) {
-          final config = ResolvedConfig.fromJson(data['config']);
-          onConfigUpdate!(config);
+      // -------------------------------------------------------------
+      // TARGETED COMMAND CENTER LISTENER (V2 5-Stage Lifecycle Handshake)
+      // -------------------------------------------------------------
+      _socket!.on('device:command', (data) {
+        if (data != null && data is Map) {
+          final commandId = data['commandId']?.toString();
+          final targetScreenId = data['screenId']?.toString();
+          final commandType = data['commandType']?.toString();
+          final payload = data['payload'];
+
+          // Strictly filter: Only execute if targeted to THIS exact TV
+          if (commandId != null &&
+              commandType != null &&
+              (targetScreenId == null || targetScreenId == _currentScreenId)) {
+
+            // 1. Immediately emit STAGE: RECEIVED back to server
+            _socket!.emit('command:received', {
+              'commandId': commandId,
+              'screenId': _currentScreenId,
+            });
+
+            // 2. Dispatch to Display Engine for execution
+            onCommandReceived?.call(commandId, commandType, payload);
+          }
         }
       });
 
-      // Listen for test display command
-      _socket!.on('command:test', (data) {
-        if (data != null && data['message'] != null && onTestCommand != null) {
-          onTestCommand!(data['message']);
-        }
-      });
-
-      // Listen for unpair/revoke
-      void handleUnpair(dynamic data) {
-        try {
-          if (data == null) {
-            onUnpaired?.call();
-            return;
-          }
-          final Map map = data is Map ? data : {};
-          if (map['screenId'] == null || map['screenId'] == _currentScreenId) {
-            onUnpaired?.call();
-          }
-        } catch (_) {
-          onUnpaired?.call();
-        }
-      }
-      _socket!.on('screen:unpaired', handleUnpair);
-
-      // Listen for remote power (Standby on / off) command
-      void handlePower(dynamic data) {
-        if (onPowerCommand != null && data != null) {
-          try {
-            final Map map = data is Map ? data : {};
-            if (map['screenId'] == null || map['screenId'] == _currentScreenId) {
-              final isPowerOn = map['isPowerOn'] == true || map['state'] == 'on';
-              onPowerCommand!(isPowerOn);
-            }
-          } catch (_) {}
-        }
-      }
-      _socket!.on('command:power', handlePower);
-      _socket!.on('screen:power', handlePower);
-
-      // Listen for real-time play/pause playback command
-      void handlePlayback(dynamic data) {
-        if (data != null && onPlaybackCommand != null) {
-          try {
-            final Map map = data is Map ? data : {};
-            if (map['screenId'] == null || map['screenId'] == _currentScreenId) {
-              final isPaused = map['isPaused'] == true;
-              onPlaybackCommand!(isPaused);
-            }
-          } catch (_) {}
-        }
-      }
-
-      _socket!.on('command:playback', handlePlayback);
-      _socket!.on('screen:playback', handlePlayback);
-
-      // Listen for snapshot capture request from admin CCTV preview
-      void handleSnapshotRequest(dynamic data) {
+      // Snapshot request listener
+      _socket!.on('command:request_snapshot', (data) {
         if (onRequestSnapshot != null) {
-          try {
-            final Map map = data is Map ? data : {};
-            if (map['screenId'] == null || map['screenId'] == _currentScreenId) {
-              onRequestSnapshot!();
-            }
-          } catch (_) {
-            onRequestSnapshot!();
-          }
+          onRequestSnapshot!();
         }
-      }
-      _socket!.on('command:request_snapshot', handleSnapshotRequest);
+      });
 
-      // Listen for emergency announcements
-      void handleEmergency(dynamic data) {
+      // Emergency alert listener
+      _socket!.on('emergency:update', (data) {
         if (onEmergencyUpdate != null) {
           try {
             if (data == null) {
               onEmergencyUpdate!(null);
               return;
             }
-            final Map? rawMap = data is Map ? data : null;
-            if (rawMap == null) {
-              onEmergencyUpdate!(null);
-              return;
-            }
-            final dynamic inner = rawMap['announcement'] ?? rawMap;
+            final dynamic inner = data is Map ? (data['announcement'] ?? data) : null;
             if (inner is Map) {
-              final announcement = Map<String, dynamic>.from(inner);
-              onEmergencyUpdate!(announcement);
+              onEmergencyUpdate!(Map<String, dynamic>.from(inner));
             } else {
               onEmergencyUpdate!(null);
             }
           } catch (_) {}
         }
-      }
-
-      _socket!.on('emergency:update', handleEmergency);
-      _socket!.on('emergency:broadcast', handleEmergency);
-      _socket!.on('emergency:dismiss', (_) {
-        if (onEmergencyUpdate != null) {
-          onEmergencyUpdate!(null);
-        }
       });
 
+      _socket!.on('emergency:dismiss', (_) {
+        onEmergencyUpdate?.call(null);
+      });
+
+      // Unpair listener
+      _socket!.on('screen:unpaired', (data) {
+        final Map map = data is Map ? data : {};
+        if (map['screenId'] == null || map['screenId'] == _currentScreenId) {
+          onUnpaired?.call();
+        }
+      });
     } catch (_) {}
   }
 
-  static void updateCurrentContent(String content) {
-    _currentContent = content;
+  // Notify server of STAGE: APPLIED
+  static void sendCommandApplied(String commandId) {
+    if (_socket != null && _socket!.connected && _currentScreenId != null) {
+      _socket!.emit('command:applied', {
+        'commandId': commandId,
+        'screenId': _currentScreenId,
+      });
+    }
+  }
+
+  // Notify server of STAGE: ACKNOWLEDGED
+  static void sendCommandAck(String commandId, [Map<String, dynamic>? resultPayload]) {
+    if (_socket != null && _socket!.connected && _currentScreenId != null) {
+      _socket!.emit('command:ack', {
+        'commandId': commandId,
+        'screenId': _currentScreenId,
+        'resultPayload': resultPayload ?? {},
+      });
+    } else if (_currentScreenId != null) {
+      // Fallback via HTTP REST
+      ApiService.acknowledgeCommand(
+        screenId: _currentScreenId!,
+        commandId: commandId,
+        resultPayload: resultPayload,
+      );
+    }
+  }
+
+  // Notify server of STAGE: FAILED
+  static void sendCommandFail(String commandId, String errorMessage) {
+    if (_socket != null && _socket!.connected && _currentScreenId != null) {
+      _socket!.emit('command:fail', {
+        'commandId': commandId,
+        'screenId': _currentScreenId,
+        'errorMessage': errorMessage,
+      });
+    } else if (_currentScreenId != null) {
+      ApiService.failCommand(
+        screenId: _currentScreenId!,
+        commandId: commandId,
+        errorMessage: errorMessage,
+      );
+    }
+  }
+
+  static void updateDiagnostics({
+    String? content,
+    int? appliedVersion,
+    int? manifestVersion,
+    bool? queueConnected,
+    DateTime? queueLastUpdate,
+  }) {
+    if (content != null) _currentContent = content;
+    if (appliedVersion != null) _appliedConfigVersion = appliedVersion;
+    if (manifestVersion != null) _mediaManifestVersion = manifestVersion;
+    if (queueConnected != null) _queueConnected = queueConnected;
+    if (queueLastUpdate != null) _queueLastUpdateAt = queueLastUpdate;
   }
 
   static void _startHeartbeat() {
@@ -202,6 +222,10 @@ class SocketService {
           'screenId': _currentScreenId,
           'currentContent': _currentContent,
           'playerVersion': AppConfig.appVersion,
+          'appliedConfigVersion': _appliedConfigVersion,
+          'mediaManifestVersion': _mediaManifestVersion,
+          'queueConnected': _queueConnected,
+          'queueLastUpdateAt': _queueLastUpdateAt.toIso8601String(),
         });
       }
     });

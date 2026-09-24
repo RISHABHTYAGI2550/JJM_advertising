@@ -13,3 +13,5 @@ export const getSocket = (): Socket => {
   }
   return socketInstance;
 };
+
+export const socket = getSocket();

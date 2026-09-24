@@ -1,5 +1,18 @@
 import React, { useState } from 'react';
-import { Image as ImageIcon, Upload, Video, Trash2, Tag, Play } from 'lucide-react';
+import {
+  Image as ImageIcon,
+  Upload,
+  Video,
+  Trash2,
+  Play,
+  X,
+  FileCheck,
+  Search,
+  ExternalLink,
+  Eye,
+  Clock,
+  Film,
+} from 'lucide-react';
 import { MediaItem } from '../types';
 import { api, getBackendBaseUrl } from '../services/api';
 
@@ -12,18 +25,36 @@ export const MediaLibraryPage: React.FC<MediaLibraryPageProps> = ({
   media,
   onRefresh,
 }) => {
+  const [activeFilter, setActiveFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
+
+  // Upload state
   const [title, setTitle] = useState('');
   const [customUrl, setCustomUrl] = useState('');
   const [duration, setDuration] = useState(15);
-  const [tags, setTags] = useState('');
-  const [category, setCategory] = useState('Promotion');
+  const [category, setCategory] = useState('Posters');
   const [file, setFile] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
-  const handleUpload = async (e: React.FormEvent) => {
+  // Filtering
+  const filteredMedia = media.filter((item) => {
+    const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!matchesSearch) return false;
+
+    if (activeFilter === 'all') return true;
+    if (activeFilter === 'images') return item.type === 'image';
+    if (activeFilter === 'videos') return item.type === 'video';
+    if (activeFilter === 'posters') return item.category?.toLowerCase() === 'posters' || item.type === 'image';
+    if (activeFilter === 'announcements') return item.category?.toLowerCase() === 'announcements';
+    return true;
+  });
+
+  const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setIsUploading(true);
     try {
       const formData = new FormData();
       if (file) {
@@ -32,11 +63,9 @@ export const MediaLibraryPage: React.FC<MediaLibraryPageProps> = ({
       formData.append('title', title);
       formData.append('customUrl', customUrl);
       formData.append('duration', duration.toString());
-      formData.append('tags', tags);
       formData.append('category', category);
 
       await api.post('/media', formData);
-
       setShowUploadModal(false);
       setTitle('');
       setCustomUrl('');
@@ -45,11 +74,12 @@ export const MediaLibraryPage: React.FC<MediaLibraryPageProps> = ({
     } catch (err: any) {
       alert(`Upload failed: ${err.message}`);
     } finally {
-      setLoading(false);
+      setIsUploading(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!confirm('Are you sure you want to delete this media asset?')) return;
     try {
       await api.delete(`/media/${id}`);
@@ -59,289 +89,422 @@ export const MediaLibraryPage: React.FC<MediaLibraryPageProps> = ({
     }
   };
 
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const dropped = e.dataTransfer.files[0];
+      setFile(dropped);
+      if (!title) {
+        setTitle(dropped.name.replace(/\.[^/.]+$/, ''));
+      }
+    }
+  };
+
   return (
-    <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Top Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h3
-            style={{
-              fontSize: '1.3rem',
-              fontWeight: 800,
-              color: 'var(--text-main)',
-              fontFamily: 'var(--font-display)',
-            }}
-          >
-            Hospital Media Library
-          </h3>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-            High-definition promotional posters, medical guidelines, and department showcase videos
+          <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--dark)' }}>
+            Media Assets Library
+          </h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            Store, verify and deploy high-definition clinical guidance posters and department video commercials.
           </p>
         </div>
+
         <button className="btn btn-primary" onClick={() => setShowUploadModal(true)}>
-          <Upload size={16} /> Upload Media Asset
+          <Upload size={15} />
+          <span>Upload Media</span>
         </button>
       </div>
 
-      {media.length === 0 ? (
-        <div className="glass-card" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-          <ImageIcon size={42} color="var(--primary)" style={{ margin: '0 auto 12px', opacity: 0.6 }} />
-          <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>No Media Assets Uploaded</h4>
-          <p style={{ fontSize: '0.825rem', marginTop: '4px' }}>Click "Upload Media Asset" above to upload promotional posters or videos.</p>
+      {/* Filter and Search Bar */}
+      <div className="card" style={{ padding: '16px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          {/* Category Tabs */}
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {[
+              { id: 'all', label: 'All Media' },
+              { id: 'images', label: 'Images' },
+              { id: 'videos', label: 'Videos' },
+              { id: 'posters', label: 'Posters' },
+              { id: 'announcements', label: 'Announcements' },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setActiveFilter(cat.id)}
+                className={activeFilter === cat.id ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm'}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Search Box */}
+          <div className="search-bar" style={{ minWidth: '240px' }}>
+            <Search size={15} color="var(--text-muted)" />
+            <input
+              type="text"
+              placeholder="Search filename or title..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Media Cards Grid */}
+      {filteredMedia.length === 0 ? (
+        <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
+          <ImageIcon size={38} color="var(--text-muted)" style={{ margin: '0 auto 12px' }} />
+          <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--dark)' }}>
+            No Media Assets Found
+          </h3>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '360px', margin: '4px auto 16px' }}>
+            Upload high-resolution clinical advisory posters or department showcase videos.
+          </p>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowUploadModal(true)}>
+            <Upload size={14} />
+            <span>Upload First Asset</span>
+          </button>
         </div>
       ) : (
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
             gap: '18px',
           }}
         >
-          {media.map((item) => {
-          const fullUrl = item.url.startsWith('/') ? `${getBackendBaseUrl()}${item.url}` : item.url;
-          return (
-            <div
-              key={item.id}
-              className="glass-card"
-              style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
-            >
-              {/* Media Preview Box */}
+          {filteredMedia.map((item) => {
+            const isVideo = item.type === 'video';
+            const fullUrl = item.url.startsWith('/') ? `${getBackendBaseUrl()}${item.url}` : item.url;
+
+            return (
               <div
+                key={item.id}
+                className="card"
                 style={{
-                  height: '180px',
-                  borderRadius: '10px',
-                  overflow: 'hidden',
-                  backgroundColor: '#0D0B12',
-                  border: '1px solid var(--border-color)',
-                  position: 'relative',
+                  padding: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '12px',
                 }}
               >
-                {item.type === 'video' ? (
-                  <video
-                    src={fullUrl}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    controls
-                  />
-                ) : item.type === 'image' && fullUrl ? (
-                  <img
-                    src={fullUrl}
-                    alt={item.title}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                ) : (
+                {/* Media Preview Box */}
+                <div
+                  onClick={() => setPreviewItem(item)}
+                  style={{
+                    position: 'relative',
+                    width: '100%',
+                    aspectRatio: '16 / 9',
+                    backgroundColor: '#15131E',
+                    borderRadius: 'var(--radius-sm)',
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {isVideo ? (
+                    <>
+                      <video
+                        src={fullUrl}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        muted
+                        preload="metadata"
+                      />
+                      <div
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          backgroundColor: 'rgba(0, 0, 0, 0.35)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#FFFFFF',
+                        }}
+                      >
+                        <Play size={28} />
+                      </div>
+                    </>
+                  ) : (
+                    <img
+                      src={fullUrl}
+                      alt={item.title}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  )}
+
+                  {/* Top Type Tag */}
+                  <span
+                    className={`badge ${isVideo ? 'badge-purple' : 'badge-neutral'}`}
+                    style={{ position: 'absolute', top: '8px', left: '8px', zIndex: 2 }}
+                  >
+                    {isVideo ? <Film size={11} /> : <ImageIcon size={11} />}
+                    {item.type}
+                  </span>
+
+                  {/* Duration Tag */}
+                  <span
+                    style={{
+                      position: 'absolute',
+                      bottom: '8px',
+                      right: '8px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                      color: '#FFFFFF',
+                      fontSize: '10px',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {item.duration || 15}s
+                  </span>
+                </div>
+
+                {/* Info */}
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--dark)' }}>
+                    {item.title}
+                  </div>
+
                   <div
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      height: '100%',
-                      color: 'var(--text-subtle)',
+                      gap: '8px',
+                      fontSize: '11px',
+                      color: 'var(--text-secondary)',
+                      marginTop: '4px',
+                      flexWrap: 'wrap',
                     }}
                   >
-                    Text Announcement
+                    <span>{item.dimensions || '1920x1080'}</span>
+                    <span>•</span>
+                    <span>{item.fileSize ? `${Math.round(item.fileSize / 1024)} KB` : 'Cloud Asset'}</span>
+                    <span>•</span>
+                    <span style={{ color: '#0E805E', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                      <FileCheck size={11} /> SHA-256
+                    </span>
                   </div>
-                )}
+                </div>
+
+                {/* Actions */}
                 <div
                   style={{
-                    position: 'absolute',
-                    top: '10px',
-                    right: '10px',
-                    padding: '3px 9px',
-                    borderRadius: '12px',
-                    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-                    backdropFilter: 'blur(4px)',
-                    color: 'white',
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px',
+                    justifyContent: 'space-between',
+                    paddingTop: '10px',
+                    borderTop: '1px solid var(--border)',
                   }}
                 >
-                  {item.type === 'video' ? <Video size={12} /> : <ImageIcon size={12} />}
-                  {item.duration}s
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => setPreviewItem(item)}
+                    style={{ fontSize: '12px' }}
+                  >
+                    <Eye size={13} />
+                    <span>Preview</span>
+                  </button>
+
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={(e) => handleDelete(item.id, e)}
+                    title="Delete Media"
+                    style={{ color: 'var(--danger)' }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
-
-              <div>
-                <h4
-                  style={{
-                    fontSize: '1rem',
-                    fontWeight: 700,
-                    color: 'var(--text-main)',
-                    lineHeight: 1.3,
-                  }}
-                >
-                  {item.title}
-                </h4>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
-                  {item.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      style={{
-                        padding: '2px 8px',
-                        borderRadius: '6px',
-                        backgroundColor: 'var(--bg-subtle)',
-                        border: '1px solid var(--border-color)',
-                        fontSize: '0.7rem',
-                        color: 'var(--primary)',
-                        fontWeight: 600,
-                      }}
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginTop: 'auto',
-                  paddingTop: '10px',
-                  borderTop: '1px solid var(--border-subtle)',
-                }}
-              >
-                <span style={{ fontSize: '0.725rem', color: 'var(--text-subtle)' }}>
-                  {item.dimensions || '1920x1080'} • {item.category}
-                </span>
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#ef4444',
-                    cursor: 'pointer',
-                    padding: '4px',
-                  }}
-                  title="Delete media"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
       )}
 
-      {/* Upload Modal */}
+      {/* Drag & Drop Upload Modal */}
       {showUploadModal && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ padding: '26px' }}>
-            <h3
-              style={{
-                fontSize: '1.2rem',
-                fontWeight: 800,
-                color: 'var(--text-main)',
-                marginBottom: '18px',
-                fontFamily: 'var(--font-display)',
-              }}
-            >
-              Upload Media Asset
-            </h3>
-            <form onSubmit={handleUpload} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Asset Title *
-                </label>
-                <input
-                  type="text"
-                  className="input-field"
-                  placeholder="e.g. Health Checkup Package Flyer"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  required
-                />
-              </div>
+        <div className="modal-overlay" onClick={() => setShowUploadModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+            <div className="modal-header">
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--dark)' }}>
+                Upload Media Asset
+              </h3>
+              <button
+                className="btn-ghost"
+                onClick={() => setShowUploadModal(false)}
+                style={{ padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Upload File (JPG, PNG, WEBP, MP4)
-                </label>
-                <input
-                  type="file"
-                  className="input-field"
-                  accept="image/*,video/*"
-                  onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
-                />
-              </div>
-
-              <div style={{ textAlign: 'center', color: 'var(--text-subtle)', fontSize: '0.75rem', fontWeight: 600 }}>
-                — OR PROVIDE WEB URL —
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Direct Media URL
-                </label>
-                <input
-                  type="url"
-                  className="input-field"
-                  placeholder="https://images.unsplash.com/..."
-                  value={customUrl}
-                  onChange={(e) => setCustomUrl(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                    Display Duration (Seconds)
-                  </label>
+            <form onSubmit={handleUploadSubmit}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* Drag and Drop Box */}
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={handleFileDrop}
+                  style={{
+                    border: `2px dashed ${isDragging ? 'var(--primary)' : 'var(--border)'}`,
+                    backgroundColor: isDragging ? 'var(--primary-subtle)' : 'var(--bg-subtle)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '24px 16px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.18s ease',
+                  }}
+                  onClick={() => document.getElementById('media-file-input')?.click()}
+                >
                   <input
-                    type="number"
-                    className="input-field"
-                    min={5}
-                    max={120}
-                    value={duration}
-                    onChange={(e) => setDuration(Number(e.target.value))}
+                    id="media-file-input"
+                    type="file"
+                    accept="image/*,video/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setFile(e.target.files[0]);
+                        if (!title) setTitle(e.target.files[0].name.replace(/\.[^/.]+$/, ''));
+                      }
+                    }}
+                  />
+                  <Upload size={28} color="var(--primary)" style={{ margin: '0 auto 8px' }} />
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--dark)' }}>
+                    {file ? file.name : 'Click to select or drag and drop a file'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    PNG, JPG, MP4, WebM (Full HD 1920x1080 recommended, max 100MB)
+                  </div>
+                </div>
+
+                {/* Or Custom URL */}
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Or Custom Direct Web URL</label>
+                  <input
+                    type="url"
+                    className="form-input"
+                    placeholder="https://images.unsplash.com/..."
+                    value={customUrl}
+                    onChange={(e) => setCustomUrl(e.target.value)}
                   />
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                    Category
-                  </label>
-                  <select
-                    className="input-field"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                  >
-                    <option value="Promotion">Promotion</option>
-                    <option value="Emergency">Emergency</option>
-                    <option value="Information">Information</option>
-                    <option value="Branding">Branding</option>
-                  </select>
+
+                {/* Media Title */}
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Asset Title</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="e.g. Free Cardiology Health Camp Banner"
+                    required
+                  />
+                </div>
+
+                {/* Category & Duration */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label className="form-label">Category</label>
+                    <select
+                      className="form-select"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                    >
+                      <option value="Posters">Posters</option>
+                      <option value="Announcements">Announcements</option>
+                      <option value="Commercials">Commercials</option>
+                      <option value="Educational">Educational</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="form-label">Playback Duration</label>
+                    <select
+                      className="form-select"
+                      value={duration}
+                      onChange={(e) => setDuration(Number(e.target.value))}
+                    >
+                      <option value={10}>10 seconds</option>
+                      <option value={15}>15 seconds</option>
+                      <option value={20}>20 seconds</option>
+                      <option value={30}>30 seconds</option>
+                      <option value={60}>60 seconds</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Tags (comma-separated)
-                </label>
-                <input
-                  type="text"
-                  className="input-field"
-                  placeholder="Checkup, OPD, Cardiology"
-                  value={tags}
-                  onChange={(e) => setTags(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '14px' }}>
+              <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="btn btn-outline btn-sm"
                   onClick={() => setShowUploadModal(false)}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? 'Uploading...' : 'Save Asset'}
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-sm"
+                  disabled={isUploading || (!file && !customUrl)}
+                >
+                  {isUploading ? 'Uploading...' : 'Upload Media'}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Asset Preview Modal */}
+      {previewItem && (
+        <div className="modal-overlay" onClick={() => setPreviewItem(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '720px' }}>
+            <div className="modal-header">
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--dark)' }}>
+                {previewItem.title}
+              </h3>
+              <button
+                className="btn-ghost"
+                onClick={() => setPreviewItem(null)}
+                style={{ padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '16px', backgroundColor: '#0F0E17', textAlign: 'center' }}>
+              {previewItem.type === 'video' ? (
+                <video
+                  src={previewItem.url.startsWith('/') ? `${getBackendBaseUrl()}${previewItem.url}` : previewItem.url}
+                  controls
+                  autoPlay
+                  style={{ width: '100%', maxHeight: '420px', borderRadius: 'var(--radius-sm)' }}
+                />
+              ) : (
+                <img
+                  src={previewItem.url.startsWith('/') ? `${getBackendBaseUrl()}${previewItem.url}` : previewItem.url}
+                  alt={previewItem.title}
+                  style={{ width: '100%', maxHeight: '420px', objectFit: 'contain', borderRadius: 'var(--radius-sm)' }}
+                />
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginRight: 'auto' }}>
+                SHA-256 Hash: {previewItem.sha256Hash ? `${previewItem.sha256Hash.substring(0, 16)}...` : 'Verified'}
+              </span>
+              <button className="btn btn-outline btn-sm" onClick={() => setPreviewItem(null)}>
+                Close Preview
+              </button>
+            </div>
           </div>
         </div>
       )}

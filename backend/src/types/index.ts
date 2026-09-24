@@ -1,6 +1,38 @@
 export type ScreenStatus = 'active' | 'inactive';
 export type ConnectionStatus = 'online' | 'offline';
 
+export type HealthStatus =
+  | 'ONLINE'
+  | 'DEGRADED'
+  | 'OFFLINE'
+  | 'SYNCING'
+  | 'UPDATE_REQUIRED'
+  | 'QUEUE_STALE'
+  | 'EMERGENCY'
+  | 'ERROR'
+  | 'RECOVERING';
+
+export type CommandType =
+  | 'SYNC_CONFIG'
+  | 'SYNC_MEDIA'
+  | 'RELOAD_QUEUE'
+  | 'RESTART_PLAYER'
+  | 'CLEAR_CACHE'
+  | 'TAKE_SNAPSHOT'
+  | 'PLAY_CAMPAIGN'
+  | 'STOP_CAMPAIGN'
+  | 'EMERGENCY_OVERRIDE';
+
+export type CommandStatus =
+  | 'CREATED'
+  | 'SENT'
+  | 'RECEIVED'
+  | 'APPLIED'
+  | 'ACKNOWLEDGED'
+  | 'FAILED'
+  | 'TIMEOUT'
+  | 'EXPIRED';
+
 export interface Department {
   id: string;
   name: string;
@@ -13,16 +45,36 @@ export interface Department {
   createdAt: string;
 }
 
+export interface Device {
+  id: string;
+  deviceToken: string;
+  platform: string;
+  model?: string;
+  appVersion: string;
+  ipAddress?: string;
+  macAddress?: string;
+  lastSeenAt: string;
+  createdAt: string;
+}
+
 export interface Screen {
   id: string;
   name: string;
   code: string;
   departmentId: string;
+  deviceId?: string | null;
   location: string;
   queueUrl: string;
+  staleThresholdSeconds: number; // Configurable per screen (default: 180s)
+  targetConfigVersion: number;   // Server authoritative target version
+  appliedConfigVersion: number;  // Reported by TV
+  mediaManifestVersion: number;
   status: ScreenStatus;
   connectionStatus: ConnectionStatus;
+  healthStatus: HealthStatus;
   lastHeartbeat: string | null;
+  lastHeartbeatAt?: string | null;
+  lastSyncAt?: string | null;
   currentContent: string;
   currentCampaignId: string | null;
   playlistId: string | null;
@@ -49,6 +101,7 @@ export interface PairingSession {
   screenId?: string;
   deviceToken?: string;
   deviceMetadata?: Record<string, any>;
+  createdAt?: string;
 }
 
 export interface MediaItem {
@@ -56,8 +109,9 @@ export interface MediaItem {
   title: string;
   type: 'image' | 'video' | 'announcement';
   url: string;
+  sha256Hash: string;
+  fileSize: number;
   duration: number; // in seconds
-  size: number;
   dimensions?: string;
   tags: string[];
   category: string;
@@ -94,6 +148,8 @@ export interface Campaign {
   mediaUrl?: string;
   playlistId?: string;
   priority: number;
+  intervalMinutes: number;
+  displayDurationSeconds: number;
   startDate?: string;
   endDate?: string;
   startTime?: string;
@@ -101,6 +157,47 @@ export interface Campaign {
   daysOfWeek: number[]; // 0 = Sunday, 6 = Saturday
   status: 'active' | 'scheduled' | 'paused' | 'expired';
   createdAt: string;
+}
+
+export interface CampaignTarget {
+  id: string;
+  campaignId: string;
+  targetType: 'ALL' | 'DEPARTMENT' | 'SCREEN';
+  targetId: string;
+}
+
+export interface DeviceCommand {
+  id: string;
+  screenId: string;
+  deviceId?: string | null;
+  commandType: CommandType;
+  payload?: any;
+  status: CommandStatus;
+  errorMessage?: string | null;
+  createdAt: string;
+  sentAt?: string | null;
+  receivedAt?: string | null;
+  appliedAt?: string | null;
+  acknowledgedAt?: string | null;
+  expiresAt: number;
+}
+
+export interface EmergencyAnnouncement {
+  id: string;
+  title: string;
+  message: string;
+  severity: 'critical' | 'warning' | 'info';
+  displayMode: 'takeover' | 'banner' | 'both';
+  targetType: 'ALL' | 'DEPARTMENT' | 'SCREEN';
+  targetIds: string[];
+  highlightScreen: boolean;
+  active: boolean;
+  isActive?: boolean;
+  status?: string;
+  durationSeconds?: number;
+  expiresAt?: number;
+  createdAt: string;
+  clearedAt?: string | null;
 }
 
 export interface AuditLog {
@@ -113,28 +210,15 @@ export interface AuditLog {
   userId?: string;
 }
 
-export interface EmergencyAnnouncement {
-  id: string;
-  title: string;
-  message: string;
-  severity: 'critical' | 'warning' | 'info';
-  displayMode: 'takeover' | 'banner' | 'both';
-  highlightScreen: boolean;
-  screenHighlight?: boolean;
-  active: boolean;
-  isActive?: boolean;
-  status?: string;
-  durationSeconds?: number;
-  expiresAt?: number;
-  createdAt: string;
-}
-
 export interface ResolvedDisplayConfig {
   screenId: string;
   screenName: string;
   departmentId: string;
   departmentName: string;
   queueUrl: string;
+  staleThresholdSeconds: number;
+  configVersion: number;
+  mediaManifestVersion: number;
   activeCampaign: {
     id: string;
     name: string;
@@ -152,5 +236,15 @@ export interface ResolvedDisplayConfig {
     powerState?: 'on' | 'off';
     emergencyAnnouncement?: EmergencyAnnouncement | null;
   };
-  resolvedAt: string;
+}
+
+export interface ReconciliationResponse {
+  success: boolean;
+  screenId: string;
+  configVersion: number;
+  mediaManifestVersion: number;
+  config: ResolvedDisplayConfig;
+  activeEmergency: EmergencyAnnouncement | null;
+  pendingCommands: DeviceCommand[];
+  timestamp: string;
 }

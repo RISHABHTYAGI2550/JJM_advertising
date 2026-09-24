@@ -1,3 +1,38 @@
+export type ScreenStatus = 'active' | 'inactive';
+export type ConnectionStatus = 'online' | 'offline';
+
+export type HealthStatus =
+  | 'ONLINE'
+  | 'DEGRADED'
+  | 'OFFLINE'
+  | 'SYNCING'
+  | 'UPDATE_REQUIRED'
+  | 'QUEUE_STALE'
+  | 'EMERGENCY'
+  | 'ERROR'
+  | 'RECOVERING';
+
+export type CommandType =
+  | 'SYNC_CONFIG'
+  | 'SYNC_MEDIA'
+  | 'RELOAD_QUEUE'
+  | 'RESTART_PLAYER'
+  | 'CLEAR_CACHE'
+  | 'TAKE_SNAPSHOT'
+  | 'PLAY_CAMPAIGN'
+  | 'STOP_CAMPAIGN'
+  | 'EMERGENCY_OVERRIDE';
+
+export type CommandStatus =
+  | 'CREATED'
+  | 'SENT'
+  | 'RECEIVED'
+  | 'APPLIED'
+  | 'ACKNOWLEDGED'
+  | 'FAILED'
+  | 'TIMEOUT'
+  | 'EXPIRED';
+
 export interface Department {
   id: string;
   name: string;
@@ -16,11 +51,19 @@ export interface Screen {
   name: string;
   code: string;
   departmentId: string;
+  deviceId?: string | null;
   location: string;
   queueUrl: string;
-  status: 'active' | 'inactive';
-  connectionStatus: 'online' | 'offline';
+  staleThresholdSeconds?: number;
+  targetConfigVersion: number;
+  appliedConfigVersion: number;
+  mediaManifestVersion: number;
+  status: ScreenStatus;
+  connectionStatus: ConnectionStatus;
+  healthStatus: HealthStatus;
   lastHeartbeat: string | null;
+  lastHeartbeatAt?: string | null;
+  lastSyncAt?: string | null;
   currentContent: string;
   currentCampaignId: string | null;
   playlistId: string | null;
@@ -39,13 +82,30 @@ export interface Screen {
   createdAt: string;
 }
 
+export interface DeviceCommand {
+  id: string;
+  screenId: string;
+  deviceId?: string;
+  commandType: CommandType;
+  payload?: any;
+  status: CommandStatus;
+  errorMessage?: string;
+  createdAt: string;
+  sentAt?: string;
+  receivedAt?: string;
+  appliedAt?: string;
+  acknowledgedAt?: string;
+  expiresAt: number;
+}
+
 export interface MediaItem {
   id: string;
   title: string;
   type: 'image' | 'video' | 'announcement';
   url: string;
+  sha256Hash?: string;
+  fileSize?: number;
   duration: number;
-  size: number;
   dimensions?: string;
   tags: string[];
   category: string;
@@ -82,6 +142,8 @@ export interface Campaign {
   mediaUrl?: string;
   playlistId?: string;
   priority: number;
+  intervalMinutes?: number;
+  displayDurationSeconds?: number;
   startDate?: string;
   endDate?: string;
   startTime?: string;
@@ -97,11 +159,16 @@ export interface EmergencyAnnouncement {
   message: string;
   severity: 'critical' | 'warning' | 'info';
   displayMode: 'takeover' | 'banner' | 'both';
+  targetType?: 'ALL' | 'DEPARTMENT' | 'SCREEN';
+  targetIds?: string[];
   highlightScreen: boolean;
   active: boolean;
+  isActive?: boolean;
+  status?: string;
   durationSeconds?: number;
   expiresAt?: number;
   createdAt: string;
+  clearedAt?: string | null;
 }
 
 export interface AuditLog {

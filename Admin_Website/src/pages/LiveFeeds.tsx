@@ -5,23 +5,12 @@ import {
   Maximize2,
   RefreshCw,
   Eye,
-  Activity,
-  Layers,
-  Sparkles,
-  AlertCircle,
+  Sliders,
+  X,
   ExternalLink,
-  Volume2,
-  VolumeX,
-  Megaphone,
-  Play,
-  Pause,
-  Power,
-  Trash2,
-  Camera,
-  Loader2,
 } from 'lucide-react';
 import { Screen, Department, Campaign, Playlist, MediaItem } from '../types';
-import { api } from '../services/api';
+import { api, getBackendBaseUrl } from '../services/api';
 
 interface LiveFeedsProps {
   screens: Screen[];
@@ -41,280 +30,54 @@ export const LiveFeeds: React.FC<LiveFeedsProps> = ({
   playlists,
   media,
   onRefresh,
-  onOpenGlobalModal,
   onSelectScreen,
 }) => {
   const [selectedDept, setSelectedDept] = useState<string>('all');
   const [gridCols, setGridCols] = useState<number>(3); // 2, 3, or 4 columns
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [fullscreenFeed, setFullscreenFeed] = useState<Screen | null>(null);
-  const [simulatedTick, setSimulatedTick] = useState<number>(0);
-  const [previewMode, setPreviewMode] = useState<'queue' | 'snapshot'>('queue');
-  const [requestingSnapshot, setRequestingSnapshot] = useState(false);
-  const [actioningId, setActioningId] = useState<string | null>(null);
-
-  // Update clock every second
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Loop simulation animation tick
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSimulatedTick((prev) => prev + 1);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const filteredScreens = screens.filter(
     (s) => selectedDept === 'all' || s.departmentId === selectedDept
   );
 
-  const onlineCount = screens.filter((s) => s.connectionStatus === 'online').length;
-  const activeCampaigns = campaigns.filter((c) => c.status === 'active');
-
-  const formatTimestamp = (date: Date) => {
-    return date.toISOString().replace('T', ' ').substring(0, 19);
-  };
-
-  // Helper to determine active content visual for a screen
-  const getScreenLiveContent = (screen: Screen) => {
-    const dept = departments.find((d) => d.id === screen.departmentId);
-
-    // Check if there is an active emergency or global campaign
-    const emergencyCamp = activeCampaigns.find((c) => c.type === 'emergency');
-    const screenCamp = activeCampaigns.find(
-      (c) =>
-        (c.type === 'screen' && c.targetIds.includes(screen.id)) ||
-        (c.type === 'department' && c.targetIds.includes(screen.departmentId)) ||
-        (c.type === 'global' && (c.targetIds.includes('all') || c.targetIds.includes(screen.id)))
-    );
-
-    const winningCampaign = emergencyCamp || screenCamp;
-
-    if (winningCampaign) {
-      if (winningCampaign.contentType === 'only_queue') {
-        return {
-          mode: 'queue',
-          title: `Doctor OPD Live Token Queue`,
-          subtitle: dept?.name || 'Consultation Queue',
-          badge: 'ONLY QUEUE CAMPAIGN',
-          color: '#10b981',
-          bgImage: null,
-        };
-      }
-
-      if (winningCampaign.contentType === 'single_image' || winningCampaign.mediaUrl) {
-        return {
-          mode: 'image',
-          title: winningCampaign.name,
-          subtitle: 'Active JJM Advertisement',
-          badge: 'SPONSORED AD OVERRIDE',
-          color: '#9D6BBA',
-          bgImage:
-            winningCampaign.mediaUrl ||
-            'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=1920&q=80',
-        };
-      }
-
-      if (winningCampaign.playlistId) {
-        const pl = playlists.find((p) => p.id === winningCampaign.playlistId);
-        const itemIdx = simulatedTick % (pl?.items.length || 1);
-        const currentItem = pl?.items[itemIdx];
-        return {
-          mode: currentItem?.type || 'playlist',
-          title: currentItem?.title || winningCampaign.name,
-          subtitle: `Playlist: ${pl?.name || 'Hospital Loop'}`,
-          badge: `PLAYLIST ITEM (${itemIdx + 1}/${pl?.items.length || 1})`,
-          color: '#6B3A8A',
-          bgImage: currentItem?.mediaUrl || null,
-        };
-      }
-    }
-
-    // Default: Alternating loop between Queue and Ads
-    const isQueueCycle = simulatedTick % 2 === 0;
-    if (isQueueCycle) {
-      return {
-        mode: 'queue',
-        title: `OPD Token Queue: ${screen.name}`,
-        subtitle: dept?.name || 'Specialist OPD',
-        badge: 'LIVE QUEUE FEED',
-        color: '#0d9488',
-        bgImage: null,
-      };
-    } else {
-      const sampleMedia = media[simulatedTick % (media.length || 1)];
-      return {
-        mode: 'image',
-        title: sampleMedia?.title || 'JJM Health & Wellness Notice',
-        subtitle: 'Automated Hospital Display Rotation',
-        badge: 'ROTATING SIGNAGE',
-        color: '#6B3A8A',
-        bgImage:
-          sampleMedia?.url ||
-          'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=1920&q=80',
-      };
-    }
-  };
-
-  const handleForceQueue = async (screenId: string) => {
+  const handleCaptureSnapshot = async (screenId: string) => {
+    setIsRefreshing(true);
     try {
-      await api.patch(`/screens/${screenId}`, { currentContent: 'queue' });
-      onRefresh();
-    } catch (err: any) {
-      alert(`Failed to set queue mode: ${err.message}`);
-    }
-  };
-
-  const handleToggleScreenPause = async (screenId: string) => {
-    setActioningId(screenId);
-    try {
-      const res = await api.post(`/screens/${screenId}/toggle-pause`);
-      if (res.data.screen && fullscreenFeed?.id === screenId) {
-        setFullscreenFeed(res.data.screen);
-      }
-      onRefresh();
-    } catch (err: any) {
-      alert(`Failed to toggle screen playback: ${err.message}`);
-    } finally {
-      setActioningId(null);
-    }
-  };
-
-  const handleToggleScreenPower = async (screen: Screen) => {
-    setActioningId(screen.id);
-    try {
-      const nextState = screen.powerState === 'off' ? 'on' : 'off';
-      const res = await api.post(`/screens/${screen.id}/power`, { state: nextState });
-      if (res.data.screen && fullscreenFeed?.id === screen.id) {
-        setFullscreenFeed(res.data.screen);
-      }
-      onRefresh();
-    } catch (err: any) {
-      alert(`Failed to change power state: ${err.message}`);
-    } finally {
-      setActioningId(null);
-    }
-  };
-
-  const handleRequestSnapshot = async (screenId: string) => {
-    setRequestingSnapshot(true);
-    try {
-      const res = await api.post(`/screens/${screenId}/request-snapshot`);
-      if (res.data.latestSnapshot && fullscreenFeed?.id === screenId) {
-        setFullscreenFeed({ ...fullscreenFeed, latestSnapshot: res.data.latestSnapshot });
-      }
-      onRefresh();
-    } catch (err: any) {
-      alert(`Failed to request snapshot: ${err.message}`);
-    } finally {
-      setTimeout(() => setRequestingSnapshot(false), 1200);
-    }
-  };
-
-  const handleUnpairScreen = async (screen: Screen) => {
-    if (
-      !confirm(
-        `Are you sure you want to unpair "${screen.name}"?\n\nThe TV will return to the pairing code screen.`
-      )
-    ) {
-      return;
-    }
-    setActioningId(screen.id);
-    try {
-      await api.post(`/screens/${screen.id}/unpair`);
-      setFullscreenFeed(null);
-      onRefresh();
-    } catch (err: any) {
-      alert(`Failed to unpair screen: ${err.message}`);
-    } finally {
-      setActioningId(null);
+      await api.post(`/screens/${screenId}/command`, {
+        commandType: 'CAPTURE_SNAPSHOT',
+      });
+      setTimeout(() => {
+        onRefresh();
+        setIsRefreshing(false);
+      }, 1500);
+    } catch (_) {
+      setIsRefreshing(false);
     }
   };
 
   return (
-    <div style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '22px' }}>
-      {/* Top CCTV Control Room Toolbar */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '14px',
-          backgroundColor: '#FFFFFF',
-          padding: '16px 22px',
-          borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--border-color)',
-          boxShadow: 'var(--shadow)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div
-            style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #1e1329 0%, #3b2152 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#FFFFFF',
-              boxShadow: '0 4px 12px rgba(107, 58, 138, 0.25)',
-            }}
-          >
-            <Video size={22} color="#9D6BBA" />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h3
-                style={{
-                  fontSize: '1.2rem',
-                  fontWeight: 800,
-                  color: 'var(--text-main)',
-                  fontFamily: 'var(--font-display)',
-                }}
-              >
-                CCTV Live Screen Control Wall
-              </h3>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  backgroundColor: 'rgba(239, 68, 68, 0.12)',
-                  color: '#dc2626',
-                  padding: '3px 9px',
-                  borderRadius: '12px',
-                  fontSize: '0.7rem',
-                  fontWeight: 800,
-                  letterSpacing: '0.04em',
-                }}
-              >
-                <span className="pulse-rec-dot" style={{ width: '7px', height: '7px' }} />
-                REAL-TIME FEEDS
-              </span>
-            </div>
-            <p style={{ fontSize: '0.785rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Live broadcast feeds and campaign preview for all connected TV screens
-            </p>
-          </div>
+    <div style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Top Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--dark)' }}>
+            Live Feeds (Screen Monitoring)
+          </h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            Multi-screen visual matrix monitoring active OPD queue displays and promotional broadcasts in real time.
+          </p>
         </div>
 
-        {/* Action Controls & Layout Switcher */}
+        {/* Toolbar: Department filter, Column layout switcher, Refresh */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* Department Filter */}
           <select
-            className="input-field"
+            className="form-select"
+            style={{ width: 'auto', minWidth: '160px', height: '36px', fontSize: '12px' }}
             value={selectedDept}
             onChange={(e) => setSelectedDept(e.target.value)}
-            style={{ padding: '8px 14px', minWidth: '170px', fontSize: '0.825rem' }}
           >
-            <option value="all">All Hospital Wards ({screens.length})</option>
+            <option value="all">All Departments</option>
             {departments.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
@@ -322,774 +85,277 @@ export const LiveFeeds: React.FC<LiveFeedsProps> = ({
             ))}
           </select>
 
-          {/* Matrix Grid Size Toggle */}
-          <div
-            style={{
-              display: 'flex',
-              backgroundColor: 'var(--bg-subtle)',
-              padding: '3px',
-              borderRadius: '10px',
-              border: '1px solid var(--border-color)',
-            }}
-          >
-            {[2, 3, 4].map((cols) => (
+          {/* 2 / 3 / 4 Column Layout Toggle */}
+          <div style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+            {[2, 3, 4].map((col) => (
               <button
-                key={cols}
-                onClick={() => setGridCols(cols)}
+                key={col}
+                onClick={() => setGridCols(col)}
                 style={{
                   padding: '6px 12px',
-                  borderRadius: '8px',
                   border: 'none',
-                  backgroundColor: gridCols === cols ? '#FFFFFF' : 'transparent',
-                  color: gridCols === cols ? 'var(--primary)' : 'var(--text-muted)',
-                  fontWeight: gridCols === cols ? 700 : 500,
-                  fontSize: '0.785rem',
+                  borderLeft: col > 2 ? '1px solid var(--border)' : 'none',
+                  backgroundColor: gridCols === col ? 'var(--primary-subtle)' : '#FFFFFF',
+                  color: gridCols === col ? 'var(--primary)' : 'var(--text-secondary)',
                   cursor: 'pointer',
-                  boxShadow: gridCols === cols ? '0 2px 6px rgba(0,0,0,0.08)' : 'none',
-                  transition: 'all 0.15s ease',
+                  fontSize: '12px',
+                  fontWeight: 600,
                 }}
               >
-                {cols}x{cols}
+                {col} Col
               </button>
             ))}
           </div>
 
           <button
-            className="btn btn-secondary"
+            className="btn btn-outline btn-sm"
             onClick={onRefresh}
-            title="Refresh Video Feeds"
-            style={{ padding: '8px 12px' }}
+            disabled={isRefreshing}
           >
-            <RefreshCw size={15} />
-          </button>
-
-          <button
-            className="btn btn-primary"
-            onClick={onOpenGlobalModal}
-            style={{ padding: '8px 16px' }}
-          >
-            <Megaphone size={15} />
-            <span>Global Broadcast</span>
+            <RefreshCw size={13} className={isRefreshing ? 'spin' : ''} />
+            <span>Refresh</span>
           </button>
         </div>
       </div>
 
-      {/* CCTV Camera Matrix Grid */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
-          gap: '18px',
-        }}
-      >
-        {filteredScreens.map((screen, index) => {
-          const dept = departments.find((d) => d.id === screen.departmentId);
-          const liveContent = getScreenLiveContent(screen);
-          const isOnline = screen.connectionStatus === 'online';
-          const camNumber = (index + 1).toString().padStart(2, '0');
+      {/* Screen Feed Matrix */}
+      {filteredScreens.length === 0 ? (
+        <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
+          <Video size={38} color="var(--text-muted)" style={{ margin: '0 auto 12px' }} />
+          <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--dark)' }}>
+            No Connected Feeds Available
+          </h3>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            Ensure your TV players are powered on and registered with the central backend engine.
+          </p>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+            gap: '18px',
+          }}
+        >
+          {filteredScreens.map((screen) => {
+            const dept = departments.find((d) => d.id === screen.departmentId);
+            const isOnline = screen.connectionStatus === 'online';
 
-          return (
-            <div
-              key={screen.id}
-              className="cctv-frame"
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                border: isOnline ? '2px solid #2d243a' : '2px solid rgba(239, 68, 68, 0.3)',
-              }}
-            >
-              {/* CCTV Aspect Ratio Display Monitor */}
-              <div className="cctv-screen-aspect">
-                {/* Camera Top HUD */}
-                <div className="cctv-overlay-header">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span
-                      style={{
-                        backgroundColor: '#dc2626',
-                        color: '#ffffff',
-                        padding: '1px 5px',
-                        borderRadius: '3px',
-                        fontWeight: 800,
-                        fontSize: '0.625rem',
-                      }}
-                    >
-                      CAM {camNumber}
-                    </span>
-                    <span style={{ fontWeight: 700, color: '#f3e8ff' }}>
-                      {screen.name.toUpperCase()}
-                    </span>
+            return (
+              <div
+                key={screen.id}
+                className="card"
+                style={{
+                  padding: '12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                }}
+              >
+                {/* Header: Name + Location + Status */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--dark)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {screen.name}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      {dept?.name || 'Department'} • {screen.location}
+                    </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {screen.isPaused && (
-                      <span
-                        style={{
-                          backgroundColor: 'rgba(239, 68, 68, 0.25)',
-                          color: '#fca5a5',
-                          border: '1px solid rgba(239, 68, 68, 0.4)',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          fontWeight: 800,
-                          fontSize: '0.625rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '3px',
-                        }}
-                      >
-                        <Pause size={9} fill="currentColor" /> PAUSED
-                      </span>
-                    )}
-                    {isOnline ? (
-                      <span
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          color: '#4ade80',
-                          fontWeight: 700,
-                          fontSize: '0.65rem',
-                        }}
-                      >
-                        <span className="pulse-dot-online" style={{ width: '6px', height: '6px' }} />
-                        30 FPS • 1080P
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          color: '#f87171',
-                          fontWeight: 700,
-                          fontSize: '0.65rem',
-                        }}
-                      >
-                        NO SIGNAL
-                      </span>
-                    )}
-                  </div>
+                  <span className={`badge ${isOnline ? 'badge-online' : 'badge-offline'}`}>
+                    <span className={`status-dot ${isOnline ? 'online' : 'offline'}`} />
+                    {isOnline ? 'Online' : 'Offline'}
+                  </span>
                 </div>
 
-                {/* Camera Screen Content */}
-                <div className="cctv-inner-content">
-                  {isOnline ? (
-                    liveContent.mode === 'queue' ? (
-                      // Live OPD Queue Screen Simulation
-                      <div
-                        style={{
-                          flex: 1,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'center',
-                          alignItems: 'center',
-                          background: 'linear-gradient(135deg, #181124 0%, #0d0914 100%)',
-                          padding: '16px',
-                          position: 'relative',
-                        }}
-                      >
-                        {/* Token Call Card */}
-                        <div
-                          style={{
-                            backgroundColor: 'rgba(107, 58, 138, 0.25)',
-                            border: '1px solid rgba(157, 107, 186, 0.4)',
-                            borderRadius: '12px',
-                            padding: '12px 24px',
-                            textAlign: 'center',
-                            backdropFilter: 'blur(6px)',
-                          }}
-                        >
-                          <div
-                            style={{
-                              fontSize: '0.7rem',
-                              color: '#d8b4fe',
-                              fontWeight: 700,
-                              letterSpacing: '0.08em',
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            NOW CALLING PATIENT
-                          </div>
-                          <div
-                            style={{
-                              fontSize: '2.2rem',
-                              fontWeight: 900,
-                              color: '#34d399',
-                              fontFamily: 'monospace',
-                              letterSpacing: '0.05em',
-                              lineHeight: 1.1,
-                              margin: '4px 0',
-                            }}
-                          >
-                            TOKEN #{(24 + (index * 3) + (simulatedTick % 5))}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: '0.775rem',
-                              color: '#FFFFFF',
-                              fontWeight: 600,
-                            }}
-                          >
-                            {dept?.name || 'General OPD'} • Room 10{index + 1}
-                          </div>
-                        </div>
-
-                        {/* Next Tokens Mini Ticker */}
-                        <div
-                          style={{
-                            marginTop: '12px',
-                            fontSize: '0.675rem',
-                            color: '#a78bfa',
-                            display: 'flex',
-                            gap: '8px',
-                            fontFamily: 'monospace',
-                          }}
-                        >
-                          <span>NEXT: #{25 + index * 3}</span>
-                          <span>|</span>
-                          <span>#{26 + index * 3}</span>
-                          <span>|</span>
-                          <span>#{27 + index * 3}</span>
-                        </div>
-                      </div>
-                    ) : (
-                      // Live Image / Video Campaign Simulation
-                      <div
-                        style={{
-                          flex: 1,
-                          backgroundImage: `url(${liveContent.bgImage})`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                          position: 'relative',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'flex-end',
-                        }}
-                      >
-                        {/* Dark Gradient Overlay for text readability */}
-                        <div
-                          style={{
-                            position: 'absolute',
-                            inset: 0,
-                            background:
-                              'linear-gradient(to top, rgba(13,9,19,0.95) 0%, rgba(13,9,19,0.3) 60%, transparent 100%)',
-                          }}
-                        />
-                        <div
-                          style={{
-                            position: 'relative',
-                            zIndex: 5,
-                            padding: '12px 14px',
-                          }}
-                        >
-                          <span
-                            style={{
-                              backgroundColor: 'rgba(107, 58, 138, 0.85)',
-                              color: '#ffffff',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontSize: '0.625rem',
-                              fontWeight: 800,
-                              letterSpacing: '0.04em',
-                            }}
-                          >
-                            {liveContent.badge}
-                          </span>
-                          <h5
-                            style={{
-                              color: '#ffffff',
-                              fontSize: '0.85rem',
-                              fontWeight: 700,
-                              marginTop: '4px',
-                              lineHeight: 1.2,
-                            }}
-                          >
-                            {liveContent.title}
-                          </h5>
-                          <p
-                            style={{
-                              color: '#c4b5fd',
-                              fontSize: '0.675rem',
-                              marginTop: '2px',
-                            }}
-                          >
-                            {liveContent.subtitle}
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  ) : (
-                    // Offline TV Screen Static Look
-                    <div
+                {/* Display Feed Screen Frame */}
+                <div
+                  style={{
+                    position: 'relative',
+                    width: '100%',
+                    aspectRatio: '16 / 9',
+                    backgroundColor: '#111019',
+                    borderRadius: 'var(--radius-sm)',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {screen.latestSnapshot ? (
+                    <img
+                      src={screen.latestSnapshot}
+                      alt={screen.name}
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    />
+                  ) : screen.queueUrl ? (
+                    <iframe
+                      src={screen.queueUrl}
+                      title={screen.name}
                       style={{
-                        flex: 1,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        background: '#120d1a',
-                        color: '#6b5b7b',
+                        width: '200%',
+                        height: '200%',
+                        transform: 'scale(0.5)',
+                        transformOrigin: 'top left',
+                        border: 'none',
+                        pointerEvents: 'none',
                       }}
-                    >
-                      <Tv size={32} color="#4a3f57" />
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#f87171' }}>
-                        TV DISPLAY DISCONNECTED
-                      </div>
-                      <div style={{ fontSize: '0.65rem', color: '#827393' }}>
-                        Check TV HDMI, WiFi, or Player App
+                    />
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '16px' }}>
+                      <Tv size={28} color="#454054" style={{ margin: '0 auto 6px' }} />
+                      <div style={{ color: '#E4DFEC', fontSize: '12px', fontWeight: 600 }}>
+                        Standby Mode
                       </div>
                     </div>
                   )}
-                </div>
 
-                {/* Camera Bottom HUD */}
-                <div className="cctv-overlay-footer">
-                  <div>{formatTimestamp(currentTime)}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ color: '#d8b4fe' }}>{dept?.code || 'GEN'}</span>
-                    <span>•</span>
-                    <span>{screen.location}</span>
-                  </div>
-                </div>
-
-                {/* Running Ticker Marquee */}
-                {isOnline && (
+                  {/* Top Live Feed Badge */}
                   <div
                     style={{
                       position: 'absolute',
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      backgroundColor: 'rgba(107, 58, 138, 0.92)',
-                      color: '#ffffff',
-                      fontSize: '0.625rem',
-                      fontWeight: 600,
-                      padding: '2px 8px',
-                      overflow: 'hidden',
-                      whiteSpace: 'nowrap',
+                      top: '8px',
+                      left: '8px',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '8px',
-                      zIndex: 8,
+                      gap: '4px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                      color: isOnline ? '#18B88A' : '#E85B61',
+                      fontSize: '9px',
+                      fontWeight: 700,
                     }}
                   >
-                    <span style={{ color: '#fed7aa', fontWeight: 800 }}>[JJM HOSPITAL]</span>
-                    <span>
-                      Emergency 24x7 Services Active • Dr. Consultation Available • Please Maintain Silence
-                    </span>
+                    <span
+                      style={{
+                        width: '5px',
+                        height: '5px',
+                        borderRadius: '50%',
+                        backgroundColor: isOnline ? '#18B88A' : '#E85B61',
+                      }}
+                    />
+                    <span>{isOnline ? 'LIVE FEED' : 'OFFLINE'}</span>
                   </div>
-                )}
-              </div>
 
-              {/* CCTV Camera Bottom Action Bar */}
-              <div
-                style={{
-                  padding: '10px 14px',
-                  backgroundColor: '#161021',
-                  borderTop: '1px solid #271e36',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button
-                    onClick={() => onSelectScreen(screen)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#c4b5fd',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                    title="Screen Configuration & Settings"
-                  >
-                    <Eye size={13} /> Details
-                  </button>
-
-                  <button
-                    onClick={() => handleForceQueue(screen.id)}
-                    style={{
-                      background: 'rgba(16, 185, 129, 0.15)',
-                      border: '1px solid rgba(16, 185, 129, 0.3)',
-                      color: '#34d399',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      fontSize: '0.675rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                    title="Switch TV directly to Doctor Queue Token"
-                  >
-                    Queue
-                  </button>
-
-                  <button
-                    onClick={() => handleToggleScreenPause(screen.id)}
-                    style={{
-                      background: screen.isPaused
-                        ? 'rgba(16, 185, 129, 0.2)'
-                        : 'rgba(239, 68, 68, 0.15)',
-                      border: screen.isPaused
-                        ? '1px solid rgba(16, 185, 129, 0.4)'
-                        : '1px solid rgba(239, 68, 68, 0.3)',
-                      color: screen.isPaused ? '#34d399' : '#f87171',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      fontSize: '0.675rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                    title={screen.isPaused ? 'Resume Screen Playback' : 'Pause Screen Playback'}
-                  >
-                    {screen.isPaused ? (
-                      <Play size={10} fill="currentColor" />
-                    ) : (
-                      <Pause size={10} fill="currentColor" />
-                    )}
-                    {screen.isPaused ? 'Resume' : 'Pause'}
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {/* Enlarge Button */}
                   <button
                     onClick={() => setFullscreenFeed(screen)}
                     style={{
-                      backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                      border: 'none',
-                      color: '#ffffff',
-                      padding: '4px 8px',
+                      position: 'absolute',
+                      bottom: '8px',
+                      right: '8px',
+                      padding: '4px',
                       borderRadius: '4px',
+                      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                      color: '#FFFFFF',
+                      border: 'none',
                       cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      fontSize: '0.7rem',
-                      fontWeight: 600,
                     }}
-                    title="Enlarge CCTV Camera View"
+                    title="Fullscreen Preview"
                   >
-                    <Maximize2 size={12} />
+                    <Maximize2 size={13} />
                   </button>
                 </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
 
-      {/* Fullscreen Camera Modal */}
+                {/* Footer Controls */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingTop: '6px',
+                    fontSize: '11px',
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    Content: <span style={{ fontWeight: 600, color: 'var(--text-main)', textTransform: 'capitalize' }}>{screen.currentContent === 'queue' ? 'Queue Display' : screen.currentContent || 'Queue'}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={() => handleCaptureSnapshot(screen.id)}
+                      title="Request Snapshot"
+                      style={{ padding: '3px 8px', fontSize: '11px' }}
+                    >
+                      Capture
+                    </button>
+
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => onSelectScreen(screen)}
+                      style={{ padding: '3px 8px', fontSize: '11px' }}
+                    >
+                      <Sliders size={11} />
+                      <span>Control</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Fullscreen Modal Preview */}
       {fullscreenFeed && (
         <div className="modal-overlay" onClick={() => setFullscreenFeed(null)}>
           <div
             className="modal-content"
-            style={{
-              maxWidth: '900px',
-              backgroundColor: '#0D0B12',
-              border: '2px solid var(--primary)',
-              padding: '0',
-              overflow: 'hidden',
-            }}
             onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '900px', width: '95%' }}
           >
-            {/* Modal Header */}
-            <div
-              style={{
-                padding: '14px 20px',
-                backgroundColor: '#181026',
-                borderBottom: '1px solid #2a1b40',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                color: '#ffffff',
-                flexWrap: 'wrap',
-                gap: '10px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span className="pulse-rec-dot" />
-                <h4 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>
-                  LIVE CCTV MONITOR: {fullscreenFeed.name.toUpperCase()} ({fullscreenFeed.code})
-                </h4>
-              </div>
-
-              {/* View Switcher Tabs */}
+            <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ display: 'flex', backgroundColor: '#0D0815', borderRadius: '8px', padding: '3px', border: '1px solid #2a1b40' }}>
-                  <button
-                    type="button"
-                    onClick={() => setPreviewMode('queue')}
-                    style={{
-                      padding: '4px 12px',
-                      borderRadius: '6px',
-                      border: 'none',
-                      backgroundColor: previewMode === 'queue' ? 'var(--primary)' : 'transparent',
-                      color: previewMode === 'queue' ? '#ffffff' : '#a78bfa',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    🖥️ Doctor Queue Web Feed
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPreviewMode('snapshot')}
-                    style={{
-                      padding: '4px 12px',
-                      borderRadius: '6px',
-                      border: 'none',
-                      backgroundColor: previewMode === 'snapshot' ? 'var(--primary)' : 'transparent',
-                      color: previewMode === 'snapshot' ? '#ffffff' : '#a78bfa',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    📸 Real TV Screen Snapshot
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => setFullscreenFeed(null)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#d8b4fe',
-                    fontSize: '1rem',
-                    cursor: 'pointer',
-                    fontWeight: 700,
-                    padding: '4px 8px',
-                  }}
-                >
-                  ✕ CLOSE
-                </button>
+                <Tv size={18} color="var(--primary)" />
+                <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--dark)' }}>
+                  {fullscreenFeed.name} — Fullscreen Live Feed
+                </h3>
               </div>
+              <button
+                className="btn-ghost"
+                onClick={() => setFullscreenFeed(null)}
+                style={{ padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
             </div>
 
-            {/* Modal Body */}
-            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {/* Screen Container 16:9 Aspect Ratio */}
-              <div
-                style={{
-                  position: 'relative',
-                  width: '100%',
-                  paddingTop: '56.25%',
-                  borderRadius: '12px',
-                  overflow: 'hidden',
-                  background: '#000000',
-                  boxShadow: '0 10px 40px rgba(0,0,0,0.8)',
-                  border: '1px solid #2a1b40',
-                }}
-              >
-                {previewMode === 'queue' ? (
-                  // Live Doctor Queue Webview Iframe
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
-                    <iframe
-                      src={fullscreenFeed.queueUrl}
-                      title={fullscreenFeed.name}
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        width: '100%',
-                        height: '100%',
-                        border: 'none',
-                        backgroundColor: '#0F172A',
-                      }}
-                      allow="autoplay"
-                    />
-                  </div>
+            <div className="modal-body" style={{ padding: '16px', backgroundColor: '#0B0A11' }}>
+              <div style={{ width: '100%', aspectRatio: '16 / 9', position: 'relative' }}>
+                {fullscreenFeed.latestSnapshot ? (
+                  <img
+                    src={fullscreenFeed.latestSnapshot}
+                    alt={fullscreenFeed.name}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  />
+                ) : fullscreenFeed.queueUrl ? (
+                  <iframe
+                    src={fullscreenFeed.queueUrl}
+                    title={fullscreenFeed.name}
+                    style={{ width: '100%', height: '100%', border: 'none' }}
+                  />
                 ) : (
-                  // Real TV Screen Snapshot
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: '#070D1E',
-                    }}
-                  >
-                    {fullscreenFeed.latestSnapshot ? (
-                      <img
-                        src={fullscreenFeed.latestSnapshot}
-                        alt="Live TV Screen Snapshot"
-                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                      />
-                    ) : (
-                      <div style={{ textAlign: 'center', color: '#94A3B8', padding: '20px' }}>
-                        <Camera size={44} color="#6B3A8A" style={{ margin: '0 auto 10px', opacity: 0.7 }} />
-                        <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#FFFFFF' }}>
-                          No TV Screenshot Received Yet
-                        </h4>
-                        <p style={{ fontSize: '0.775rem', marginTop: '4px', maxWidth: '360px', margin: '4px auto 14px' }}>
-                          Click below to request the running TV player to capture its current frame and send it live over WebSocket.
-                        </p>
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => handleRequestSnapshot(fullscreenFeed.id)}
-                          disabled={requestingSnapshot}
-                        >
-                          {requestingSnapshot ? <Loader2 size={13} className="spin" /> : <Camera size={13} />}
-                          <span>{requestingSnapshot ? 'Capturing...' : 'Capture TV Screenshot Now'}</span>
-                        </button>
-                      </div>
-                    )}
+                  <div style={{ color: '#FFFFFF', textAlign: 'center', paddingTop: '80px' }}>
+                    No display signal active
                   </div>
                 )}
               </div>
+            </div>
 
-              {/* Status and Telemetry Bar */}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  backgroundColor: '#161021',
-                  padding: '10px 14px',
-                  borderRadius: '10px',
-                  border: '1px solid #271e36',
-                  fontSize: '0.75rem',
-                  color: '#CBD5E1',
-                  flexWrap: 'wrap',
-                  gap: '8px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span className={`status-badge ${fullscreenFeed.connectionStatus}`}>
-                    <span className={fullscreenFeed.connectionStatus === 'online' ? 'pulse-dot-online' : 'pulse-dot-offline'} />
-                    {fullscreenFeed.connectionStatus.toUpperCase()}
-                  </span>
-
-                  {fullscreenFeed.powerState === 'off' ? (
-                    <span style={{ padding: '2px 8px', borderRadius: '10px', backgroundColor: '#334155', color: '#FFFFFF', fontWeight: 800, fontSize: '0.675rem' }}>
-                      DISPLAY STANDBY
-                    </span>
-                  ) : (
-                    <span style={{ padding: '2px 8px', borderRadius: '10px', backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#34D399', fontWeight: 800, fontSize: '0.675rem' }}>
-                      DISPLAY ACTIVE
-                    </span>
-                  )}
-
-                  {fullscreenFeed.isPaused ? (
-                    <span style={{ padding: '2px 8px', borderRadius: '10px', backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#F87171', fontWeight: 800, fontSize: '0.675rem' }}>
-                      QUEUE ONLY MODE (ADS PAUSED)
-                    </span>
-                  ) : (
-                    <span style={{ padding: '2px 8px', borderRadius: '10px', backgroundColor: 'rgba(107, 58, 138, 0.3)', color: '#D8B4FE', fontWeight: 800, fontSize: '0.675rem' }}>
-                      ROTATING ADS ACTIVE
-                    </span>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#94A3B8' }}>
-                  <span>Location: <strong style={{ color: '#F8FAFC' }}>{fullscreenFeed.location}</strong></span>
-                  <span>URL: <a href={fullscreenFeed.queueUrl} target="_blank" rel="noreferrer" style={{ color: '#38BDF8', textDecoration: 'none' }}>Open Tab ↗</a></span>
-                </div>
+            <div className="modal-footer">
+              <div style={{ marginRight: 'auto', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                Queue URL: {fullscreenFeed.queueUrl || 'Not configured'}
               </div>
-
-              {/* Complete Remote Control Buttons Toolbar */}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  borderTop: '1px solid #271e36',
-                  paddingTop: '12px',
-                  flexWrap: 'wrap',
-                  gap: '8px',
-                }}
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => setFullscreenFeed(null)}
               >
-                {/* Left controls */}
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {/* Play/Pause Ads */}
-                  <button
-                    className={`btn btn-sm ${fullscreenFeed.isPaused ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => handleToggleScreenPause(fullscreenFeed.id)}
-                    disabled={actioningId === fullscreenFeed.id}
-                    title={fullscreenFeed.isPaused ? 'Resume advertisement rotation' : 'Stop ads and show only doctor queue'}
-                    style={
-                      fullscreenFeed.isPaused
-                        ? { backgroundColor: '#10B981', borderColor: '#10B981', color: '#FFFFFF' }
-                        : { color: '#34D399', borderColor: 'rgba(16, 185, 129, 0.4)' }
-                    }
-                  >
-                    {actioningId === fullscreenFeed.id ? (
-                      <Loader2 size={13} className="spin" />
-                    ) : fullscreenFeed.isPaused ? (
-                      <Play size={13} fill="currentColor" />
-                    ) : (
-                      <Pause size={13} fill="currentColor" />
-                    )}
-                    <span>{fullscreenFeed.isPaused ? 'Resume Ads' : 'Pause Ads (Queue Only)'}</span>
-                  </button>
-
-                  {/* Remote Power On / Off */}
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => handleToggleScreenPower(fullscreenFeed)}
-                    disabled={actioningId === fullscreenFeed.id}
-                    title={fullscreenFeed.powerState === 'off' ? 'Wake screen display' : 'Turn screen display OFF (Standby)'}
-                    style={{ color: fullscreenFeed.powerState === 'off' ? '#10B981' : '#94A3B8' }}
-                  >
-                    <Power size={13} />
-                    <span>{fullscreenFeed.powerState === 'off' ? 'Wake TV (Turn ON)' : 'Turn Screen OFF (Standby)'}</span>
-                  </button>
-
-                  {/* Snapshot Request */}
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => {
-                      setPreviewMode('snapshot');
-                      handleRequestSnapshot(fullscreenFeed.id);
-                    }}
-                    disabled={requestingSnapshot}
-                    title="Capture live screenshot from TV kiosk"
-                  >
-                    {requestingSnapshot ? <Loader2 size={13} className="spin" /> : <Camera size={13} />}
-                    <span>{requestingSnapshot ? 'Capturing...' : 'Capture Snapshot'}</span>
-                  </button>
-
-                  {/* Refresh */}
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => handleForceQueue(fullscreenFeed.id)}
-                    title="Force refresh display"
-                  >
-                    <RefreshCw size={13} />
-                    <span>Refresh Display</span>
-                  </button>
-                </div>
-
-                {/* Right controls */}
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => {
-                      onSelectScreen(fullscreenFeed);
-                      setFullscreenFeed(null);
-                    }}
-                  >
-                    <Eye size={13} />
-                    <span>Screen Settings</span>
-                  </button>
-
-                  <button
-                    className="btn btn-danger btn-sm"
-                    onClick={() => handleUnpairScreen(fullscreenFeed)}
-                    disabled={actioningId === fullscreenFeed.id}
-                    title="Unpair TV and disconnect"
-                  >
-                    <Trash2 size={13} />
-                    <span>Unpair TV</span>
-                  </button>
-                </div>
-              </div>
+                Close Fullscreen
+              </button>
             </div>
           </div>
         </div>

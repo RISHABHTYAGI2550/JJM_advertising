@@ -1,13 +1,16 @@
-import { db } from '../db/database';
-import { PairingSession, Screen } from '../types';
 import { v4 as uuidv4 } from 'uuid';
+import { pairingRepo, auditRepo } from '../db/repositories/miscRepositories';
+import { screenRepo } from '../db/repositories/screenRepository';
+import { deviceRepo } from '../db/repositories/deviceRepository';
+import { PairingSession, Screen } from '../types';
 
 export class PairingService {
-  // Generate a random 6-digit numeric pairing code
+  /**
+   * Generates a 6-digit numeric pairing code with 15 minutes validity
+   */
   public createPairingSession(socketId?: string, deviceMetadata?: Record<string, any>): PairingSession {
-    // 6-digit number between 100000 and 999999
     const pairingCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes validity
+    const expiresAt = Date.now() + 15 * 60 * 1000;
 
     const session: PairingSession = {
       pairingCode,
@@ -15,13 +18,16 @@ export class PairingService {
       expiresAt,
       status: 'pending',
       deviceMetadata,
+      createdAt: new Date().toISOString(),
     };
 
-    db.savePairingSession(session);
+    pairingRepo.save(session);
     return session;
   }
 
-  // Admin approves pairing
+  /**
+   * Admin claims pairing code and binds physical TV hardware (deviceId) to logical screen slot (screenId)
+   */
   public pairScreen(
     pairingCode: string,
     data: {
@@ -30,9 +36,10 @@ export class PairingService {
       departmentId: string;
       location: string;
       queueUrl: string;
+      staleThresholdSeconds?: number;
     }
   ): { screen: Screen; session: PairingSession } {
-    const session = db.getPairingSession(pairingCode);
+    const session = pairingRepo.get(pairingCode);
     if (!session) {
       throw new Error('Invalid or expired pairing code');
     }
@@ -42,63 +49,88 @@ export class PairingService {
     }
 
     const screenCode = data.code || `SCR-${Math.floor(100 + Math.random() * 900)}`;
-    const screenId = `SCR-${screenCode}`;
+    const screenId = data.code && data.code.startsWith('SCR-') ? data.code : `SCR-${screenCode}`;
     const deviceToken = `DEV-${uuidv4()}`;
+    const deviceId = `HW-${uuidv4().substring(0, 8).toUpperCase()}`;
 
-    // Create or update screen in database
-    let screen = db.getScreenById(screenId);
+    // 1. Register physical hardware device in devices table
+    const meta = session.deviceMetadata || {};
+    deviceRepo.upsert({
+      id: deviceId,
+      deviceToken,
+      platform: meta.platform || 'Android TV',
+      model: meta.model || 'Hospital Smart TV',
+      appVersion: meta.version || '1.0.0',
+      ipAddress: meta.ipAddress,
+    });
+
+    // 2. Link device to logical screen slot without duplicating screens
+    let screen = screenRepo.getById(screenId);
     if (screen) {
-      screen = db.updateScreen(screenId, {
+      screen = screenRepo.update(screenId, {
         name: data.name,
         departmentId: data.departmentId,
+        deviceId,
         location: data.location,
         queueUrl: data.queueUrl,
+        staleThresholdSeconds: data.staleThresholdSeconds || screen.staleThresholdSeconds || 180,
         deviceToken,
         connectionStatus: 'online',
+        healthStatus: 'ONLINE',
         lastHeartbeat: new Date().toISOString(),
+        lastHeartbeatAt: new Date().toISOString(),
         status: 'active',
       })!;
     } else {
-      screen = db.createScreen({
+      screen = screenRepo.create({
         id: screenId,
         name: data.name,
         code: screenCode,
         departmentId: data.departmentId,
+        deviceId,
         location: data.location,
         queueUrl: data.queueUrl,
+        staleThresholdSeconds: data.staleThresholdSeconds || 180,
+        targetConfigVersion: 1,
+        appliedConfigVersion: 0,
+        mediaManifestVersion: 1,
         status: 'active',
         connectionStatus: 'online',
+        healthStatus: 'ONLINE',
         lastHeartbeat: new Date().toISOString(),
+        lastHeartbeatAt: new Date().toISOString(),
         currentContent: 'queue',
         currentCampaignId: null,
         playlistId: 'PL-DEFAULT',
         deviceToken,
-        playerVersion: '1.0.0',
-        deviceMetadata: session.deviceMetadata,
+        playerVersion: meta.version || '1.0.0',
+        deviceMetadata: meta,
       });
     }
 
-    // Update session
+    // 3. Mark session paired
     session.status = 'paired';
     session.screenId = screen.id;
     session.deviceToken = deviceToken;
-    db.savePairingSession(session);
-    db.logAudit('PAIR_DEVICE', 'Screen', screen.id, `Device paired with code ${pairingCode} as ${screen.name}`);
+    pairingRepo.save(session);
 
+    auditRepo.log('PAIR_DEVICE', 'Screen', screen.id, `Device ${deviceId} paired with code ${pairingCode} as ${screen.name}`);
     return { screen, session };
   }
 
   public unpairScreen(screenId: string): Screen | null {
-    const screen = db.getScreenById(screenId);
+    const screen = screenRepo.getById(screenId);
     if (!screen) return null;
 
-    const updated = db.updateScreen(screenId, {
+    const updated = screenRepo.update(screenId, {
       deviceToken: null,
+      deviceId: null,
       connectionStatus: 'offline',
+      healthStatus: 'OFFLINE',
       status: 'inactive',
     });
 
-    db.logAudit('UNPAIR_DEVICE', 'Screen', screenId, `Device revoked/unpaired`);
+    auditRepo.log('UNPAIR_DEVICE', 'Screen', screenId, `Device unpaired from screen ${screen.name}`);
     return updated;
   }
 }

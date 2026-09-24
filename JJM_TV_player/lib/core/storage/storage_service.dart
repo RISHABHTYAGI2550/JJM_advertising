@@ -41,6 +41,7 @@ class StorageService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyScreenId);
     await prefs.remove(_keyDeviceToken);
+    await prefs.remove(_keyCachedConfig);
   }
 
   static Future<void> saveCachedConfig(ResolvedConfig config) async {

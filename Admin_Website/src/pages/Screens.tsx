@@ -3,17 +3,22 @@ import {
   Tv,
   Plus,
   Search,
-  RefreshCw,
-  Edit2,
+  RotateCcw,
+  Sliders,
   Play,
   Pause,
   Power,
   Trash2,
-  Eye,
-  Loader2,
   ExternalLink,
-  Shield,
   Layers,
+  LayoutGrid,
+  List,
+  Edit2,
+  X,
+  Radio,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { Screen, Department } from '../types';
 import { api } from '../services/api';
@@ -33,142 +38,258 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
   onSelectScreen,
   onOpenPairModal,
   onRefreshScreens,
-  onOpenLiveFeed,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDept, setSelectedDept] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [actioningId, setActioningId] = useState<string | null>(null);
-  const [bulkLoading, setBulkLoading] = useState(false);
+  const [selectedDoctor, setSelectedDoctor] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
-  // Toggle Ads (Pause Ads -> Only Queue / Resume Ads)
+  // Edit screen modal state
+  const [editingScreen, setEditingScreen] = useState<Screen | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editLocation, setEditLocation] = useState('');
+  const [editDepartmentId, setEditDepartmentId] = useState('');
+  const [editQueueUrl, setEditQueueUrl] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Statistics
+  const totalScreens = screens.length;
+  const onlineScreens = screens.filter((s) => s.connectionStatus === 'online').length;
+  const offlineScreens = totalScreens - onlineScreens;
+  const needsAttention = screens.filter(
+    (s) => s.healthStatus === 'UPDATE_REQUIRED' || s.healthStatus === 'QUEUE_STALE' || s.connectionStatus === 'offline'
+  ).length;
+
+  // Extract unique doctors from queue URLs or names for doctor filter
+  const doctorList = Array.from(
+    new Set(
+      screens
+        .map((s) => {
+          const match = s.queueUrl?.match(/DOC\d+/i) || s.name.match(/Doctor\s*\d+|Dr\.\s*\w+/i);
+          return match ? match[0] : null;
+        })
+        .filter(Boolean)
+    )
+  );
+
+  // Filtered screens
+  const filteredScreens = screens.filter((screen) => {
+    const matchesSearch =
+      screen.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      screen.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      screen.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      screen.queueUrl.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesDept = selectedDept === 'all' || screen.departmentId === selectedDept;
+
+    const matchesStatus =
+      selectedStatus === 'all' ||
+      (selectedStatus === 'online' && screen.connectionStatus === 'online') ||
+      (selectedStatus === 'offline' && screen.connectionStatus === 'offline') ||
+      (selectedStatus === 'attention' &&
+        (screen.healthStatus === 'UPDATE_REQUIRED' || screen.healthStatus === 'QUEUE_STALE'));
+
+    const matchesDoctor =
+      selectedDoctor === 'all' ||
+      (screen.queueUrl && screen.queueUrl.includes(selectedDoctor)) ||
+      screen.name.includes(selectedDoctor);
+
+    return matchesSearch && matchesDept && matchesStatus && matchesDoctor;
+  });
+
+  const handleOpenEdit = (screen: Screen, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingScreen(screen);
+    setEditName(screen.name);
+    setEditLocation(screen.location);
+    setEditDepartmentId(screen.departmentId);
+    setEditQueueUrl(screen.queueUrl || '');
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingScreen) return;
+    setEditSaving(true);
+    try {
+      await api.patch(`/screens/${editingScreen.id}`, {
+        name: editName,
+        location: editLocation,
+        departmentId: editDepartmentId,
+        queueUrl: editQueueUrl,
+      });
+      setEditingScreen(null);
+      onRefreshScreens();
+    } catch (err: any) {
+      alert(`Failed to save screen settings: ${err.message}`);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const handleTogglePause = async (screenId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setActioningId(screenId);
     try {
       await api.post(`/screens/${screenId}/toggle-pause`);
       onRefreshScreens();
     } catch (err: any) {
       alert(`Failed to toggle screen playback: ${err.message}`);
-    } finally {
-      setActioningId(null);
     }
   };
 
-  // Toggle Remote Screen Power (Standby on / off)
   const handleTogglePower = async (screen: Screen, e: React.MouseEvent) => {
     e.stopPropagation();
-    setActioningId(screen.id);
     try {
       const nextState = screen.powerState === 'off' ? 'on' : 'off';
       await api.post(`/screens/${screen.id}/power`, { state: nextState });
       onRefreshScreens();
     } catch (err: any) {
       alert(`Failed to change power state: ${err.message}`);
-    } finally {
-      setActioningId(null);
     }
   };
 
-  // Unpair TV screen
+  const handleRestartScreen = async (screen: Screen, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Send restart command to "${screen.name}"?`)) return;
+    try {
+      await api.post(`/screens/${screen.id}/command`, {
+        commandType: 'REBOOT_DEVICE',
+        payload: { force: true },
+      });
+      alert('Restart command dispatched to TV.');
+      onRefreshScreens();
+    } catch (err: any) {
+      alert(`Failed to restart: ${err.message}`);
+    }
+  };
+
+  const handleTestScreen = async (screen: Screen, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await api.post(`/screens/${screen.id}/command`, {
+        commandType: 'EMERGENCY_OVERRIDE',
+        payload: {
+          title: 'TV DISPLAY CONNECTION TEST',
+          message: 'System test packet received successfully. Display engine operational.',
+          durationSeconds: 6,
+        },
+      });
+      alert('Test alert dispatched to screen.');
+      onRefreshScreens();
+    } catch (err: any) {
+      alert(`Failed to test: ${err.message}`);
+    }
+  };
+
   const handleUnpairScreen = async (screen: Screen, e: React.MouseEvent) => {
     e.stopPropagation();
     if (
       !confirm(
-        `Are you sure you want to unpair "${screen.name}"?\n\nThe TV kiosk will immediately disconnect and return to the 6-digit pairing code screen.`
+        `Are you sure you want to unpair "${screen.name}"?\n\nThe TV will return to the 6-digit pairing code screen.`
       )
     ) {
       return;
     }
-    setActioningId(screen.id);
     try {
       await api.post(`/screens/${screen.id}/unpair`);
       onRefreshScreens();
     } catch (err: any) {
-      alert(`Failed to unpair screen: ${err.message}`);
-    } finally {
-      setActioningId(null);
+      alert(`Failed to unpair: ${err.message}`);
     }
   };
-
-  // Bulk: Pause or Resume all ads
-  const handleBulkPause = async (isPaused: boolean) => {
-    setBulkLoading(true);
-    try {
-      await api.post('/screens/pause-all', { isPaused });
-      onRefreshScreens();
-    } catch (err: any) {
-      alert(`Bulk pause failed: ${err.message}`);
-    } finally {
-      setBulkLoading(false);
-    }
-  };
-
-  // Bulk: Turn all screens on or off
-  const handleBulkPower = async (state: 'on' | 'off') => {
-    setBulkLoading(true);
-    try {
-      await api.post('/screens/power-all', { state });
-      onRefreshScreens();
-    } catch (err: any) {
-      alert(`Bulk power failed: ${err.message}`);
-    } finally {
-      setBulkLoading(false);
-    }
-  };
-
-  const filteredScreens = screens.filter((s) => {
-    const matchesSearch =
-      s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.queueUrl.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.location.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesDept = selectedDept === 'all' || s.departmentId === selectedDept;
-    const matchesStatus = selectedStatus === 'all' || s.connectionStatus === selectedStatus;
-
-    return matchesSearch && matchesDept && matchesStatus;
-  });
 
   return (
-    <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Filters & Fleet Actions Bar */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '14px',
-          backgroundColor: 'var(--card-bg)',
-          padding: '16px 20px',
-          borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--border-color)',
-          boxShadow: 'var(--shadow)',
-        }}
-      >
-        {/* Search */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '240px' }}>
-          <Search size={18} color="var(--text-subtle)" />
-          <input
-            type="text"
-            className="input-field"
-            placeholder="Search TV displays by name, room, queue URL, doctor code..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ padding: '8px 14px' }}
-          />
+    <div style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Top Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--dark)' }}>
+            Screens / TVs Management
+          </h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            Control and monitor connected hospital display units across all OPD wards.
+          </p>
         </div>
 
-        {/* Filters and Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <button className="btn btn-primary" onClick={onOpenPairModal}>
+          <Plus size={15} />
+          <span>+ Pair New TV</span>
+        </button>
+      </div>
+
+      {/* Top Statistics Cards (4 Cards) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+        <div className="card" style={{ padding: '16px 20px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Total Screens
+          </div>
+          <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--dark)', marginTop: '6px' }}>
+            {totalScreens}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+            Registered displays
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '16px 20px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Online
+          </div>
+          <div style={{ fontSize: '26px', fontWeight: 700, color: '#0E805E', marginTop: '6px' }}>
+            {onlineScreens}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+            Transmitting heartbeats
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '16px 20px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Offline
+          </div>
+          <div style={{ fontSize: '26px', fontWeight: 700, color: offlineScreens > 0 ? 'var(--danger)' : 'var(--text-main)', marginTop: '6px' }}>
+            {offlineScreens}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+            Unreachable / disconnected
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: '16px 20px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Needs Attention
+          </div>
+          <div style={{ fontSize: '26px', fontWeight: 700, color: needsAttention > 0 ? 'var(--warning)' : 'var(--text-main)', marginTop: '6px' }}>
+            {needsAttention}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+            Version drift or stale queue
+          </div>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar Section */}
+      <div className="card" style={{ padding: '16px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          {/* Search Input */}
+          <div className="search-bar" style={{ flex: '1 1 240px' }}>
+            <Search size={16} color="var(--text-muted)" />
+            <input
+              type="text"
+              placeholder="Search by TV name, location, doctor, or code..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          {/* Department Filter */}
           <select
-            className="input-field"
+            className="form-select"
+            style={{ width: 'auto', minWidth: '150px' }}
             value={selectedDept}
             onChange={(e) => setSelectedDept(e.target.value)}
-            style={{ padding: '8px 12px', minWidth: '160px', fontSize: '0.825rem' }}
           >
-            <option value="all">All Departments ({screens.length})</option>
+            <option value="all">All Departments</option>
             {departments.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
@@ -176,342 +297,424 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
             ))}
           </select>
 
+          {/* Status Filter */}
           <select
-            className="input-field"
+            className="form-select"
+            style={{ width: 'auto', minWidth: '140px' }}
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            style={{ padding: '8px 12px', minWidth: '130px', fontSize: '0.825rem' }}
           >
-            <option value="all">All Status</option>
+            <option value="all">All Statuses</option>
             <option value="online">Online</option>
             <option value="offline">Offline</option>
+            <option value="attention">Needs Attention</option>
           </select>
 
-          <button className="btn btn-secondary" onClick={onRefreshScreens} title="Refresh Screen Fleet">
-            <RefreshCw size={16} />
-          </button>
+          {/* Doctor Filter if doctors exist */}
+          {doctorList.length > 0 && (
+            <select
+              className="form-select"
+              style={{ width: 'auto', minWidth: '130px' }}
+              value={selectedDoctor}
+              onChange={(e) => setSelectedDoctor(e.target.value)}
+            >
+              <option value="all">All Doctors</option>
+              {doctorList.map((doc) => (
+                <option key={doc} value={doc!}>
+                  {doc}
+                </option>
+              ))}
+            </select>
+          )}
 
-          <button className="btn btn-primary" onClick={onOpenPairModal}>
-            <Plus size={16} /> Pair New TV
-          </button>
+          {/* View Mode Switcher: Grid vs Table */}
+          <div style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+            <button
+              onClick={() => setViewMode('grid')}
+              style={{
+                padding: '8px 12px',
+                border: 'none',
+                backgroundColor: viewMode === 'grid' ? 'var(--primary-subtle)' : '#FFFFFF',
+                color: viewMode === 'grid' ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+              }}
+              title="Grid View"
+            >
+              <LayoutGrid size={16} />
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              style={{
+                padding: '8px 12px',
+                border: 'none',
+                borderLeft: '1px solid var(--border)',
+                backgroundColor: viewMode === 'table' ? 'var(--primary-subtle)' : '#FFFFFF',
+                color: viewMode === 'table' ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+              }}
+              title="Table View"
+            >
+              <List size={16} />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Fleet Quick Action Bar */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '12px',
-          padding: '12px 18px',
-          borderRadius: '12px',
-          backgroundColor: 'var(--bg-subtle)',
-          border: '1px solid var(--border-color)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Layers size={16} color="var(--primary)" />
-          <span style={{ fontSize: '0.825rem', fontWeight: 700, color: 'var(--text-main)' }}>
-            Fleet-Wide Master Controls ({screens.length} Screens):
-          </span>
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => handleBulkPause(true)}
-            disabled={bulkLoading}
-            title="Stop ads on all TVs and show only Doctor Token Queue"
-          >
-            <Pause size={13} fill="currentColor" color="#DC2626" />
-            <span>Pause All Ads (Queue Only)</span>
-          </button>
-
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => handleBulkPause(false)}
-            disabled={bulkLoading}
-            title="Resume normal advertising loop across all TVs"
-          >
-            <Play size={13} fill="currentColor" color="#10B981" />
-            <span>Resume All Ads</span>
-          </button>
-
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => handleBulkPower('off')}
-            disabled={bulkLoading}
-            title="Turn all screen displays off (Standby black screen)"
-          >
-            <Power size={13} color="#64748B" />
-            <span>Turn All Screens OFF</span>
-          </button>
-
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => handleBulkPower('on')}
-            disabled={bulkLoading}
-            title="Wake and turn all screens on"
-          >
-            <Power size={13} color="#10B981" />
-            <span>Turn All Screens ON</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Screens Grid */}
+      {/* Main Content: Table or Grid */}
       {filteredScreens.length === 0 ? (
-        <div className="glass-card" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-          <Tv size={42} color="var(--primary)" style={{ margin: '0 auto 12px', opacity: 0.6 }} />
-          <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>No TV Displays Found</h4>
-          <p style={{ fontSize: '0.825rem', marginTop: '4px' }}>Click "Pair New TV" above to connect your first hospital display.</p>
+        <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
+          <Tv size={36} color="var(--text-muted)" style={{ margin: '0 auto 12px' }} />
+          <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--dark)' }}>
+            No Matching Screens Found
+          </h3>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            Try resetting your search filters or pair a new TV screen.
+          </p>
         </div>
-      ) : (
+      ) : viewMode === 'grid' ? (
+        /* Grid View */
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
-            gap: '20px',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gap: '18px',
           }}
         >
           {filteredScreens.map((screen) => {
             const dept = departments.find((d) => d.id === screen.departmentId);
-            const isStandby = screen.powerState === 'off';
-            const isAdsPaused = !!screen.isPaused;
-            const isLoadingThis = actioningId === screen.id;
+            const isOnline = screen.connectionStatus === 'online';
+            const isPaused = screen.isPaused;
+            const isPowerOff = screen.powerState === 'off';
 
             return (
               <div
                 key={screen.id}
-                className="glass-card"
+                className="card"
+                onClick={() => onSelectScreen(screen)}
                 style={{
+                  padding: '18px',
+                  cursor: 'pointer',
                   display: 'flex',
                   flexDirection: 'column',
+                  justifyContent: 'space-between',
                   gap: '14px',
-                  border: isStandby
-                    ? '1px solid rgba(100, 116, 139, 0.4)'
-                    : isAdsPaused
-                    ? '1px solid rgba(16, 185, 129, 0.4)'
-                    : undefined,
-                  opacity: isStandby ? 0.85 : 1.0,
                 }}
               >
-                {/* Header with Title & Status Badges */}
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div
-                      style={{
-                        width: '44px',
-                        height: '44px',
-                        borderRadius: '12px',
-                        background: isStandby
-                          ? '#1E293B'
-                          : 'linear-gradient(135deg, rgba(107, 58, 138, 0.15) 0%, rgba(157, 107, 186, 0.2) 100%)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Tv size={22} color={isStandby ? '#94A3B8' : '#6B3A8A'} />
-                    </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                     <div>
-                      <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                      <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--dark)' }}>
                         {screen.name}
-                      </h4>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700 }}>
-                        {dept?.name || 'Department'} • {screen.code}
-                      </span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        {dept?.name || 'Department'} • {screen.location}
+                      </div>
                     </div>
-                  </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      {isStandby && (
-                        <span
-                          style={{
-                            padding: '2px 7px',
-                            borderRadius: '10px',
-                            fontSize: '0.65rem',
-                            fontWeight: 800,
-                            backgroundColor: '#334155',
-                            color: '#CBD5E1',
-                          }}
-                        >
-                          STANDBY
-                        </span>
-                      )}
-                      {isAdsPaused && !isStandby && (
-                        <span
-                          style={{
-                            padding: '2px 7px',
-                            borderRadius: '10px',
-                            fontSize: '0.65rem',
-                            fontWeight: 800,
-                            backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                            color: '#059669',
-                            border: '1px solid rgba(16, 185, 129, 0.3)',
-                          }}
-                        >
-                          QUEUE ONLY
-                        </span>
-                      )}
-                      <span className={`status-badge ${screen.connectionStatus}`}>
-                        <span
-                          className={
-                            screen.connectionStatus === 'online'
-                              ? 'pulse-dot-online'
-                              : 'pulse-dot-offline'
-                          }
-                        />
-                        {screen.connectionStatus}
-                      </span>
-                    </div>
-                    <span style={{ fontSize: '0.675rem', color: 'var(--text-subtle)' }}>
-                      Location: {screen.location}
+                    <span className={`badge ${isOnline ? 'badge-online' : 'badge-offline'}`}>
+                      <span className={`status-dot ${isOnline ? 'online' : 'offline'}`} />
+                      {isOnline ? 'Online' : 'Offline'}
                     </span>
                   </div>
-                </div>
 
-                {/* Queue URL & Telemetry Info */}
-                <div
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    backgroundColor: 'var(--bg-subtle)',
-                    border: '1px solid var(--border-color)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.675rem', color: 'var(--text-subtle)', fontWeight: 700, textTransform: 'uppercase' }}>
-                      Doctor HMS Live Queue URL
-                    </span>
-                    <a
-                      href={screen.queueUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ fontSize: '0.7rem', color: 'var(--primary)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}
-                    >
-                      <span>Open Link</span> <ExternalLink size={10} />
-                    </a>
-                  </div>
+                  {/* Metadata info */}
                   <div
                     style={{
-                      fontSize: '0.75rem',
-                      color: 'var(--text-main)',
-                      fontFamily: 'monospace',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
+                      margin: '12px 0 0',
+                      padding: '10px 12px',
+                      backgroundColor: 'var(--bg-main)',
+                      borderRadius: 'var(--radius-sm)',
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '8px',
+                      fontSize: '11px',
                     }}
                   >
-                    {screen.queueUrl}
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Now Showing:</span>
+                      <div style={{ fontWeight: 600, color: 'var(--text-main)', marginTop: '2px', textTransform: 'capitalize' }}>
+                        {screen.currentContent === 'queue' ? 'Queue Display' : screen.currentContent || 'Queue'}
+                      </div>
+                    </div>
+
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Player Version:</span>
+                      <div style={{ fontWeight: 600, color: 'var(--primary)', marginTop: '2px' }}>
+                        v{screen.playerVersion || '1.0.0'}
+                      </div>
+                    </div>
+
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Queue URL:</span>
+                      <div style={{ fontWeight: 500, color: 'var(--text-secondary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {screen.queueUrl || 'None'}
+                      </div>
+                    </div>
+
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Last Seen:</span>
+                      <div style={{ fontWeight: 500, color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        {screen.lastHeartbeat
+                          ? new Date(screen.lastHeartbeat).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                          : 'Pending'}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Device Telemetry Pills */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                  <span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: 'var(--bg-subtle)' }}>
-                    App: v{screen.playerVersion || '1.0.0'}
-                  </span>
-                  <span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: 'var(--bg-subtle)' }}>
-                    Device: {screen.deviceMetadata?.platform || 'Android TV'}
-                  </span>
-                  <span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: 'var(--bg-subtle)' }}>
-                    Token: {screen.deviceToken ? 'Bound' : 'Pending'}
-                  </span>
-                </div>
-
-                {/* Direct Action Control Buttons */}
+                {/* Actions Toolbar */}
                 <div
                   style={{
                     display: 'flex',
-                    justifyContent: 'space-between',
                     alignItems: 'center',
-                    borderTop: '1px solid var(--border-subtle)',
+                    justifyContent: 'space-between',
                     paddingTop: '12px',
-                    marginTop: 'auto',
-                    flexWrap: 'wrap',
-                    gap: '8px',
+                    borderTop: '1px solid var(--border)',
                   }}
                 >
-                  {/* Left Controls: Play/Pause Ads & Power */}
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    {/* Toggle Ads (Pause Ads -> Only Queue / Resume Ads) */}
-                    <button
-                      className={`btn btn-sm ${isAdsPaused ? 'btn-primary' : 'btn-secondary'}`}
-                      onClick={(e) => handleTogglePause(screen.id, e)}
-                      disabled={isLoadingThis}
-                      title={isAdsPaused ? 'Resume advertisement rotation' : 'Stop ads and display only Doctor Queue'}
-                      style={
-                        isAdsPaused
-                          ? { backgroundColor: '#10B981', borderColor: '#10B981', color: '#FFFFFF' }
-                          : { color: '#059669', borderColor: 'rgba(16, 185, 129, 0.4)' }
-                      }
-                    >
-                      {isLoadingThis ? (
-                        <Loader2 size={13} className="spin" />
-                      ) : isAdsPaused ? (
-                        <Play size={13} fill="currentColor" />
-                      ) : (
-                        <Pause size={13} fill="currentColor" />
-                      )}
-                      <span>{isAdsPaused ? 'Resume Ads' : 'Pause Ads (Queue Only)'}</span>
-                    </button>
-
-                    {/* Remote Screen Power (Standby on / off) */}
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={(e) => handleTogglePower(screen, e)}
-                      disabled={isLoadingThis}
-                      title={isStandby ? 'Wake screen display' : 'Turn screen display OFF (Standby energy saver)'}
-                      style={
-                        isStandby
-                          ? { backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#059669', borderColor: 'rgba(16, 185, 129, 0.4)' }
-                          : { color: '#64748B' }
-                      }
-                    >
-                      <Power size={13} />
-                      <span>{isStandby ? 'Wake TV' : 'Screen OFF'}</span>
-                    </button>
-                  </div>
-
-                  {/* Right Controls: CCTV Monitor & Unpair & Edit */}
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => onSelectScreen(screen)}
-                      title="Edit screen parameters"
+                      className="btn btn-outline btn-sm"
+                      onClick={(e) => handleOpenEdit(screen, e)}
+                      title="Edit Screen Details"
                     >
                       <Edit2 size={13} />
-                      <span>Settings</span>
                     </button>
 
                     <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={(e) => handleUnpairScreen(screen, e)}
-                      disabled={isLoadingThis}
-                      title="Disconnect and unpair this TV from ads and system"
-                      style={{ color: '#DC2626', borderColor: 'rgba(220, 38, 38, 0.3)' }}
+                      className="btn btn-outline btn-sm"
+                      onClick={(e) => handleTogglePause(screen.id, e)}
+                      title={isPaused ? 'Resume Playback' : 'Pause Playback'}
                     >
-                      <Trash2 size={13} />
-                      <span>Unpair</span>
+                      {isPaused ? <Play size={13} color="var(--success)" /> : <Pause size={13} color="var(--warning)" />}
+                    </button>
+
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={(e) => handleTogglePower(screen, e)}
+                      title={isPowerOff ? 'Power ON Display' : 'Power OFF Standby'}
+                    >
+                      <Power size={13} color={isPowerOff ? 'var(--danger)' : 'var(--text-secondary)'} />
+                    </button>
+
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(`/display/${screen.id}`, '_blank');
+                      }}
+                      title="Open Live TV Display URL"
+                    >
+                      <ExternalLink size={13} color="var(--primary)" />
+                    </button>
+
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={(e) => handleRestartScreen(screen, e)}
+                      title="Reboot TV Player"
+                    >
+                      <RotateCcw size={13} />
+                    </button>
+
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={(e) => handleTestScreen(screen, e)}
+                      title="Send Test Packet"
+                    >
+                      <Radio size={13} />
                     </button>
                   </div>
+
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => onSelectScreen(screen)}
+                  >
+                    <Sliders size={13} />
+                    <span>Control</span>
+                  </button>
                 </div>
               </div>
             );
           })}
+        </div>
+      ) : (
+        /* Table View */
+        <div className="table-container">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>TV Name & Code</th>
+                <th>Department</th>
+                <th>Location</th>
+                <th>Current Content</th>
+                <th>Queue URL</th>
+                <th>Version</th>
+                <th>Last Seen</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredScreens.map((screen) => {
+                const dept = departments.find((d) => d.id === screen.departmentId);
+                const isOnline = screen.connectionStatus === 'online';
+
+                return (
+                  <tr key={screen.id} onClick={() => onSelectScreen(screen)} style={{ cursor: 'pointer' }}>
+                    <td>
+                      <span className={`badge ${isOnline ? 'badge-online' : 'badge-offline'}`}>
+                        <span className={`status-dot ${isOnline ? 'online' : 'offline'}`} />
+                        {isOnline ? 'Online' : 'Offline'}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 600, color: 'var(--dark)' }}>{screen.name}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{screen.code}</div>
+                    </td>
+                    <td>{dept?.name || 'Department'}</td>
+                    <td>{screen.location}</td>
+                    <td>
+                      <span className="badge badge-neutral" style={{ textTransform: 'capitalize' }}>
+                        {screen.currentContent === 'queue' ? 'Queue Display' : screen.currentContent || 'Queue'}
+                      </span>
+                    </td>
+                    <td style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {screen.queueUrl || '-'}
+                    </td>
+                    <td>
+                      <span className="badge badge-purple">
+                        v{screen.playerVersion || '1.0.0'}
+                      </span>
+                    </td>
+                    <td>
+                      {screen.lastHeartbeat
+                        ? new Date(screen.lastHeartbeat).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : 'Pending'}
+                    </td>
+                    <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                      <div style={{ display: 'inline-flex', gap: '6px' }}>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(`/display/${screen.id}`, '_blank');
+                          }}
+                          title="Launch Public TV Display"
+                        >
+                          <ExternalLink size={13} color="var(--primary)" />
+                        </button>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={(e) => handleOpenEdit(screen, e)}
+                          title="Edit"
+                        >
+                          <Edit2 size={13} />
+                        </button>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => onSelectScreen(screen)}
+                        >
+                          <Sliders size={13} />
+                          <span>Control</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Edit Screen Modal */}
+      {editingScreen && (
+        <div className="modal-overlay" onClick={() => setEditingScreen(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--dark)' }}>
+                Edit TV Screen Settings
+              </h3>
+              <button
+                className="btn-ghost"
+                onClick={() => setEditingScreen(null)}
+                style={{ padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">TV Display Name</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Location / Consultation Room</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={editLocation}
+                    onChange={(e) => setEditLocation(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Hospital Department</label>
+                  <select
+                    className="form-select"
+                    value={editDepartmentId}
+                    onChange={(e) => setEditDepartmentId(e.target.value)}
+                    required
+                  >
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} ({d.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Doctor OPD Queue URL</label>
+                  <input
+                    type="url"
+                    className="form-input"
+                    value={editQueueUrl}
+                    onChange={(e) => setEditQueueUrl(e.target.value)}
+                    placeholder="https://hms.jjmhospitalkashipur.com/qd/DOC038"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() => setEditingScreen(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-sm"
+                  disabled={editSaving}
+                >
+                  {editSaving ? 'Saving...' : 'Save Settings'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

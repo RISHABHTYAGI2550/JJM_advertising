@@ -10,7 +10,10 @@ import { CampaignsPage } from './pages/Campaigns';
 import { AuditLogsPage } from './pages/AuditLogs';
 import { LiveFeeds } from './pages/LiveFeeds';
 import { EmergencyAnnouncements } from './pages/EmergencyAnnouncements';
+import { DeploymentReconciliation } from './pages/DeploymentReconciliation';
+import { SettingsPage } from './pages/Settings';
 import { Login } from './pages/Login';
+import { PublicDisplayView } from './pages/PublicDisplayView';
 import { PairScreenModal } from './components/PairScreenModal';
 import { ScreenDetailModal } from './components/ScreenDetailModal';
 import { OneClickGlobalModal } from './components/OneClickGlobalModal';
@@ -19,7 +22,19 @@ import { api } from './services/api';
 import { getSocket } from './services/socket';
 
 export const App: React.FC = () => {
-  // Authentication check: Must authenticate with ID JJMads@Vibesoft.in & Pass JJM@#ads & PIN 935989
+  // Public Display Screen Route Check (e.g. /display/SCR-DOC038 or ?display=SCR-DOC038)
+  const [displayScreenId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const path = window.location.pathname;
+    if (path.startsWith('/display/')) {
+      const id = path.replace('/display/', '').trim();
+      if (id) return id;
+    }
+    const params = new URLSearchParams(window.location.search);
+    return params.get('display');
+  });
+
+  // Authentication check: Authorized with ID JJMads@Vibesoft.in & Pass JJM@#ads & PIN 935989
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
       return !!localStorage.getItem('jjm_auth_user');
@@ -46,6 +61,7 @@ export const App: React.FC = () => {
   const handleLogout = () => {
     try {
       localStorage.removeItem('jjm_auth_user');
+      localStorage.removeItem('jjm_auth_token');
     } catch {}
     setIsAuthenticated(false);
   };
@@ -97,7 +113,7 @@ export const App: React.FC = () => {
       );
     });
 
-    socket.on('screen:heartbeat_received', ({ screenId, status, currentContent }) => {
+    socket.on('screen:heartbeat_received', ({ screenId, currentContent }) => {
       setScreens((prev) =>
         prev.map((s) =>
           s.id === screenId
@@ -129,11 +145,74 @@ export const App: React.FC = () => {
     };
   }, [isAuthenticated]);
 
+  // Standalone Public TV Display Route (Bypasses admin login)
+  if (displayScreenId) {
+    return <PublicDisplayView screenId={displayScreenId} />;
+  }
+
   if (!isAuthenticated) {
     return <Login onLoginSuccess={() => setIsAuthenticated(true)} />;
   }
 
   const onlineScreensCount = screens.filter((s) => s.connectionStatus === 'online').length;
+
+  const getPageTitle = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return 'Hospital Overview & Operations';
+      case 'emergency':
+        return 'Emergency Broadcast Center';
+      case 'screens':
+        return 'Screens / TVs Management';
+      case 'live-feeds':
+        return 'Live Screen Feeds (CCTV Monitoring)';
+      case 'reconciliation':
+        return 'Deployment & Version Reconciliation';
+      case 'departments':
+        return 'Hospital Departments';
+      case 'media':
+        return 'Media Assets Library';
+      case 'playlists':
+        return 'Display Sequence Playlists';
+      case 'campaigns':
+        return 'Campaigns & Advertisements';
+      case 'audit':
+        return 'Hospital Audit Logs';
+      case 'settings':
+        return 'Platform Settings & Configuration';
+      default:
+        return 'Hospital Overview';
+    }
+  };
+
+  const getPageSubtitle = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return 'Monitor, control and broadcast content across all connected hospital displays.';
+      case 'emergency':
+        return 'Instant alert takeover across all hospital screens and OPD consultation displays.';
+      case 'screens':
+        return 'Control and monitor connected hospital display units across all OPD wards.';
+      case 'live-feeds':
+        return 'Multi-screen visual matrix monitoring active OPD queue displays in real time.';
+      case 'reconciliation':
+        return 'Real-time telemetry tracking target vs applied configuration versions and parity.';
+      case 'departments':
+        return 'Manage medical divisions, assigned doctors, queue URLs, and dedicated TV screens.';
+      case 'media':
+        return 'Store, verify and deploy high-definition clinical guidance posters and videos.';
+      case 'playlists':
+        return 'Build visual sequence rotations interleaving doctor OPD queues with announcements.';
+      case 'campaigns':
+        return 'Schedule and target hospital awareness campaigns and health camp ads.';
+      case 'audit':
+        return 'Immutable operational log tracking TV pairings, emergency broadcasts, and queue updates.';
+      case 'settings':
+        return 'Configure hospital parameters, Android TV kiosk policies, and queue watchdog thresholds.';
+      default:
+        return 'JJM Hospital Kashipur Central Signage Control Plane';
+    }
+  };
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-main)' }}>
@@ -153,34 +232,12 @@ export const App: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100vh', overflow: 'hidden' }}>
         <Header
-          title={
-            activeTab === 'dashboard'
-              ? 'Hospital Overview & Operations'
-              : activeTab === 'emergency'
-              ? 'Emergency Announcement Broadcast Center'
-              : activeTab === 'live-feeds'
-              ? 'Live Screen Feeds (CCTV Monitoring)'
-              : activeTab === 'screens'
-              ? 'Screens & TV Displays'
-              : activeTab === 'departments'
-              ? 'Hospital Departments'
-              : activeTab === 'media'
-              ? 'Media Assets Library'
-              : activeTab === 'playlists'
-              ? 'Display Sequence Playlists'
-              : activeTab === 'campaigns'
-              ? 'Promotions & Campaigns'
-              : 'Audit Trail & Activity'
-          }
-          subtitle={
-            activeTab === 'emergency'
-              ? 'Live emergency alerts, ticker broadcasts, and visual overrides across all hospital TV displays'
-              : activeTab === 'live-feeds'
-              ? 'Real-time CCTV matrix monitoring active TV screen campaigns and live OPD queues'
-              : 'JJM Hospital Kashipur Central Signage Control Plane'
-          }
+          title={getPageTitle()}
+          subtitle={getPageSubtitle()}
+          onlineScreensCount={onlineScreensCount}
+          totalScreensCount={screens.length}
           onOpenPairModal={() => setIsPairModalOpen(true)}
           onOpenGlobalAdModal={() => setIsGlobalModalOpen(true)}
           onLogout={handleLogout}
@@ -229,6 +286,10 @@ export const App: React.FC = () => {
             />
           )}
 
+          {activeTab === 'reconciliation' && (
+            <DeploymentReconciliation />
+          )}
+
           {activeTab === 'departments' && (
             <DepartmentsPage departments={departments} onRefresh={fetchData} />
           )}
@@ -254,6 +315,8 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'audit' && <AuditLogsPage logs={auditLogs} />}
+
+          {activeTab === 'settings' && <SettingsPage />}
         </main>
       </div>
 

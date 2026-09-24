@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
-import { db } from '../db/database';
-import { io } from '../server';
+import { emergencyRepo } from '../db/repositories/emergencyRepository';
+import { screenRepo } from '../db/repositories/screenRepository';
+import { auditRepo } from '../db/repositories/miscRepositories';
 import { resolverService } from '../services/resolverService';
+import { io } from '../server';
 import { EmergencyAnnouncement } from '../types';
 
 const router = Router();
-
 let autoDismissTimer: NodeJS.Timeout | null = null;
 
 // Helper to push dismiss to all screens
@@ -14,35 +15,39 @@ function dismissActiveEmergency() {
     clearTimeout(autoDismissTimer);
     autoDismissTimer = null;
   }
-  db.setEmergencyAnnouncement(null);
+  emergencyRepo.clearActive();
 
   if (io) {
     io.emit('emergency:update', { announcement: null });
     io.emit('emergency:dismiss', {});
-    db.getScreens().forEach((s) => {
+    screenRepo.getAll().forEach((s) => {
       try {
         const config = resolverService.resolveScreenConfig(s.id);
         io.to(`screen:${s.id}`).emit('config:update', { config });
-        io.emit('config:update', { screenId: s.id, config });
       } catch {}
     });
     io.emit('screens:changed');
   }
+
+  auditRepo.log('EMERGENCY_DISMISSED', 'Emergency', 'ALL', 'Active emergency announcement dismissed');
 }
 
-// GET current emergency announcement
+// GET current active emergency announcement
 router.get('/', (req: Request, res: Response) => {
-  const announcement = db.getEmergencyAnnouncement();
-  if (announcement && announcement.expiresAt && announcement.expiresAt <= Date.now()) {
-    dismissActiveEmergency();
-    return res.json({ success: true, announcement: null });
-  }
+  const { screenId, departmentId } = req.query;
+  const announcement = emergencyRepo.getActive(screenId as string, departmentId as string);
   return res.json({ success: true, announcement });
 });
 
-// POST Broadcast emergency announcement
+// GET all past and present emergency announcements
+router.get('/history', (req: Request, res: Response) => {
+  const announcements = emergencyRepo.getAll();
+  return res.json({ success: true, announcements });
+});
+
+// POST Broadcast emergency announcement with targeted scope
 router.post('/broadcast', (req: Request, res: Response) => {
-  const { title, message, severity, displayMode, highlightScreen, durationSeconds } = req.body;
+  const { title, message, severity, displayMode, targetType, targetIds, highlightScreen, durationSeconds } = req.body;
 
   if (!title || !message) {
     return res.status(400).json({ success: false, message: 'Title and message are required' });
@@ -53,66 +58,59 @@ router.post('/broadcast', (req: Request, res: Response) => {
     autoDismissTimer = null;
   }
 
+  const id = `EMERG-${Date.now().toString(36).toUpperCase()}`;
   const parsedDuration = durationSeconds ? Number(durationSeconds) : undefined;
-  const expiresAt = parsedDuration && parsedDuration > 0 ? Date.now() + parsedDuration * 1000 : undefined;
 
-  const announcement: EmergencyAnnouncement = {
-    id: `EMERG-${Date.now().toString(36).toUpperCase()}`,
+  const announcement = emergencyRepo.create({
+    id,
     title: title.trim(),
     message: message.trim(),
     severity: severity || 'critical',
     displayMode: displayMode || 'takeover',
+    targetType: targetType || 'ALL',
+    targetIds: Array.isArray(targetIds) && targetIds.length > 0 ? targetIds : ['all'],
     highlightScreen: highlightScreen !== undefined ? !!highlightScreen : true,
-    active: true,
-    durationSeconds: parsedDuration && parsedDuration > 0 ? parsedDuration : undefined,
-    expiresAt,
-    createdAt: new Date().toISOString(),
-  };
+    durationSeconds: parsedDuration,
+  });
 
-  // Add backward/forward compatible aliases
-  (announcement as any).isActive = true;
-  (announcement as any).screenHighlight = announcement.highlightScreen;
-  (announcement as any).status = 'active';
-
-  db.setEmergencyAnnouncement(announcement);
-
-  // Broadcast to all screens via Socket.IO
+  // Broadcast targeted emergency event
   if (io) {
     io.emit('emergency:update', { announcement });
     io.emit('emergency:broadcast', { announcement });
-    // Also push config update to all screen rooms and globally
-    db.getScreens().forEach((s) => {
+
+    // Notify targeted screen rooms
+    screenRepo.getAll().forEach((s) => {
       try {
         const config = resolverService.resolveScreenConfig(s.id);
         io.to(`screen:${s.id}`).emit('config:update', { config });
-        io.emit('config:update', { screenId: s.id, config });
       } catch {}
     });
     io.emit('screens:changed');
   }
 
-  // Schedule auto-dismiss if duration was specified (e.g. 4 seconds)
+  // Schedule auto-dismiss if duration specified
   if (parsedDuration && parsedDuration > 0) {
     autoDismissTimer = setTimeout(() => {
-      const current = db.getEmergencyAnnouncement();
+      const current = emergencyRepo.getActive();
       if (current && current.id === announcement.id) {
         dismissActiveEmergency();
       }
     }, parsedDuration * 1000);
   }
 
-  return res.json({
-    success: true,
-    announcement,
-    message: `Emergency announcement broadcasted to all screens${parsedDuration ? ` for ${parsedDuration}s` : ''}`,
-  });
+  auditRepo.log('EMERGENCY_BROADCAST', 'Emergency', id, `Triggered emergency: ${title} (${targetType || 'ALL'})`);
+  return res.json({ success: true, announcement });
 });
 
-// POST Dismiss emergency announcement
+// DELETE / POST clear active emergency
+router.delete('/', (req: Request, res: Response) => {
+  dismissActiveEmergency();
+  return res.json({ success: true, message: 'Emergency cleared successfully' });
+});
+
 router.post('/dismiss', (req: Request, res: Response) => {
   dismissActiveEmergency();
-  return res.json({ success: true, message: 'Emergency announcement dismissed and normal playback restored' });
+  return res.json({ success: true, message: 'Emergency dismissed' });
 });
 
 export default router;
-

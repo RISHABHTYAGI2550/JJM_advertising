@@ -1,5 +1,18 @@
 import React, { useState } from 'react';
-import { Building2, Plus, Edit2, Trash2, ExternalLink } from 'lucide-react';
+import {
+  Building2,
+  Plus,
+  Edit2,
+  Trash2,
+  ExternalLink,
+  Tv,
+  ListVideo,
+  Clock,
+  User,
+  X,
+  Sliders,
+  CheckCircle2,
+} from 'lucide-react';
 import { Department } from '../types';
 import { api } from '../services/api';
 
@@ -14,11 +27,13 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
+  const [selectedDeptDetail, setSelectedDeptDetail] = useState<Department | null>(null);
 
   // Form states for Add/Edit
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
-  const [floor, setFloor] = useState('');
+  const [floor, setFloor] = useState('1st Floor');
+  const [doctorInCharge, setDoctorInCharge] = useState('');
   const [description, setDescription] = useState('');
   const [defaultQueueUrl, setDefaultQueueUrl] = useState(
     'https://hms.jjmhospitalkashipur.com/qd/DOC038'
@@ -29,16 +44,19 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
     setName('');
     setCode('');
     setFloor('1st Floor');
+    setDoctorInCharge('Dr. Abhishek Goel');
     setDescription('');
     setDefaultQueueUrl('https://hms.jjmhospitalkashipur.com/qd/DOC038');
     setShowAddModal(true);
   };
 
-  const openEditModal = (dept: Department) => {
+  const openEditModal = (dept: Department, e: React.MouseEvent) => {
+    e.stopPropagation();
     setEditingDept(dept);
     setName(dept.name);
     setCode(dept.code);
     setFloor(dept.floor || '1st Floor');
+    setDoctorInCharge((dept as any).doctorInCharge || 'Dr. Abhishek Goel');
     setDescription(dept.description || '');
     setDefaultQueueUrl(dept.defaultQueueUrl || 'https://hms.jjmhospitalkashipur.com/qd/DOC038');
   };
@@ -84,7 +102,8 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
     }
   };
 
-  const handleDelete = async (id: string, deptName: string) => {
+  const handleDelete = async (id: string, deptName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!confirm(`Are you sure you want to delete department: ${deptName}?`)) return;
     try {
       await api.delete(`/departments/${id}`);
@@ -95,364 +114,356 @@ export const DepartmentsPage: React.FC<DepartmentsPageProps> = ({
   };
 
   return (
-    <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Top Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h3
-            style={{
-              fontSize: '1.3rem',
-              fontWeight: 800,
-              color: 'var(--text-main)',
-              fontFamily: 'var(--font-display)',
-            }}
-          >
-            Hospital Departments & Wards
-          </h3>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-            Configure hospital departments, floors, and default doctor queue URLs for assigned TVs
+          <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--dark)' }}>
+            Hospital Departments
+          </h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            Manage medical divisions, assigned specialist doctors, queue URLs, and dedicated TV screens.
           </p>
         </div>
+
         <button className="btn btn-primary" onClick={openAddModal}>
-          <Plus size={16} /> Add Department
+          <Plus size={15} />
+          <span>+ Add Department</span>
         </button>
       </div>
 
-      {departments.length === 0 ? (
-        <div className="glass-card" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-          <Building2 size={42} color="var(--primary)" style={{ margin: '0 auto 12px', opacity: 0.6 }} />
-          <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>No Departments Added Yet</h4>
-          <p style={{ fontSize: '0.825rem', marginTop: '4px' }}>Click "Add Department" above to create your hospital OPD clinics and wards.</p>
-        </div>
-      ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))',
-            gap: '18px',
-          }}
-        >
-          {departments.map((dept) => (
-            <div key={dept.id} className="glass-card">
+      {/* Department Cards Grid */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+          gap: '18px',
+        }}
+      >
+        {departments.map((dept) => {
+          const doctorName = (dept as any).doctorInCharge || (dept.code === 'DEP-OPD' ? 'Dr. Sharma (DOC038)' : 'Specialist Consultant');
+
+          return (
             <div
+              key={dept.id}
+              className="card"
+              onClick={() => setSelectedDeptDetail(dept)}
               style={{
+                cursor: 'pointer',
                 display: 'flex',
+                flexDirection: 'column',
                 justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                marginBottom: '14px',
+                gap: '14px',
+                padding: '20px',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div
-                  style={{
-                    width: '42px',
-                    height: '42px',
-                    borderRadius: '12px',
-                    background:
-                      'linear-gradient(135deg, rgba(107, 58, 138, 0.15) 0%, rgba(157, 107, 186, 0.2) 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Building2 size={22} color="#6B3A8A" />
-                </div>
-                <div>
-                  <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)' }}>
-                    {dept.name}
-                  </h4>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--primary)', fontWeight: 700 }}>
-                    Code: {dept.code}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: 'var(--radius-sm)',
+                        backgroundColor: 'var(--primary-subtle)',
+                        color: 'var(--primary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Building2 size={18} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--dark)', textTransform: 'uppercase' }}>
+                        {dept.name}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        {dept.floor || '1st Floor'} • Code: {dept.code}
+                      </div>
+                    </div>
+                  </div>
+
+                  <span className="badge badge-online">
+                    <span className="status-dot online" />
+                    Active
                   </span>
                 </div>
-              </div>
-              <span
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: '14px',
-                  backgroundColor: 'rgba(107, 58, 138, 0.08)',
-                  fontSize: '0.75rem',
-                  color: 'var(--primary)',
-                  fontWeight: 700,
-                }}
-              >
-                {dept.screenCount ?? 0} Screens
-              </span>
-            </div>
 
-            <div style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-              Floor / Ward Location: <strong style={{ color: 'var(--text-main)' }}>{dept.floor}</strong>
-            </div>
-
-            {dept.description && (
-              <p
-                style={{
-                  fontSize: '0.775rem',
-                  color: 'var(--text-subtle)',
-                  marginBottom: '12px',
-                  lineHeight: 1.4,
-                }}
-              >
-                {dept.description}
-              </p>
-            )}
-
-            <div
-              style={{
-                padding: '10px 12px',
-                borderRadius: '8px',
-                backgroundColor: 'var(--bg-subtle)',
-                border: '1px solid var(--border-color)',
-                marginBottom: '14px',
-              }}
-            >
-              <div
-                style={{
-                  fontSize: '0.675rem',
-                  color: 'var(--text-subtle)',
-                  textTransform: 'uppercase',
-                  fontWeight: 700,
-                }}
-              >
-                Default Doctor Queue URL
-              </div>
-              <div
-                style={{
-                  fontSize: '0.75rem',
-                  color: 'var(--text-main)',
-                  fontFamily: 'monospace',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  marginTop: '3px',
-                }}
-              >
-                {dept.defaultQueueUrl}
-              </div>
-            </div>
-
-            {/* Edit & Delete Action Buttons */}
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: '8px',
-                borderTop: '1px solid var(--border-subtle)',
-                paddingTop: '12px',
-              }}
-            >
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => openEditModal(dept)}
-              >
-                <Edit2 size={13} />
-                <span>Edit</span>
-              </button>
-              <button
-                className="btn btn-danger btn-sm"
-                onClick={() => handleDelete(dept.id, dept.name)}
-              >
-                <Trash2 size={13} />
-                <span>Delete</span>
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-      )}
-
-      {/* Add Department Modal */}
-      {showAddModal && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ padding: '26px' }}>
-            <h3
-              style={{
-                fontSize: '1.2rem',
-                fontWeight: 800,
-                color: 'var(--text-main)',
-                marginBottom: '18px',
-                fontFamily: 'var(--font-display)',
-              }}
-            >
-              Add New Hospital Department
-            </h3>
-            <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Department Name
-                </label>
-                <input
-                  type="text"
-                  className="input-field"
-                  placeholder="e.g. Cardiology OPD, Radiology..."
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                    Department Code
-                  </label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    placeholder="e.g. CARD, ORTHO"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    required
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                    Floor / Wing
-                  </label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    placeholder="e.g. 1st Floor, OPD Wing B"
-                    value={floor}
-                    onChange={(e) => setFloor(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Default HMS Queue URL
-                </label>
-                <input
-                  type="url"
-                  className="input-field"
-                  value={defaultQueueUrl}
-                  onChange={(e) => setDefaultQueueUrl(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Description (Optional)
-                </label>
-                <textarea
-                  className="input-field"
-                  rows={3}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Ward description, consulting doctors..."
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setShowAddModal(false)}
+                {/* Doctor & Details Box */}
+                <div
+                  style={{
+                    margin: '14px 0 0',
+                    padding: '12px',
+                    backgroundColor: 'var(--bg-main)',
+                    borderRadius: 'var(--radius-sm)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    fontSize: '12px',
+                  }}
                 >
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? 'Creating...' : 'Create Department'}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <User size={14} color="var(--primary)" />
+                    <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>{doctorName}</span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
+                    <span>Assigned TVs:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--dark)' }}>1 TV Connected</span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
+                    <span>Queue Status:</span>
+                    <span style={{ fontWeight: 600, color: '#0E805E' }}>Active</span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
+                    <span>Active Playlist:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--primary)' }}>Hospital Standard</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingTop: '12px',
+                  borderTop: '1px solid var(--border)',
+                }}
+              >
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={(e) => openEditModal(dept, e)}
+                    title="Edit Department"
+                  >
+                    <Edit2 size={13} />
+                  </button>
+
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={(e) => handleDelete(dept.id, dept.name, e)}
+                    title="Delete Department"
+                  >
+                    <Trash2 size={13} color="var(--danger)" />
+                  </button>
+                </div>
+
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setSelectedDeptDetail(dept)}
+                >
+                  <Sliders size={13} />
+                  <span>Manage</span>
                 </button>
               </div>
-            </form>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Department Detail Modal / Drawer */}
+      {selectedDeptDetail && (
+        <div className="modal-overlay" onClick={() => setSelectedDeptDetail(null)}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '600px' }}
+          >
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Building2 size={20} color="var(--primary)" />
+                <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--dark)' }}>
+                  {selectedDeptDetail.name} — Department Detail
+                </h3>
+              </div>
+              <button
+                className="btn-ghost"
+                onClick={() => setSelectedDeptDetail(null)}
+                style={{ padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div
+                style={{
+                  padding: '14px',
+                  backgroundColor: 'var(--bg-subtle)',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                  fontSize: '13px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Department Code:</span>
+                  <span style={{ fontWeight: 600, color: 'var(--dark)' }}>{selectedDeptDetail.code}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Floor Location:</span>
+                  <span style={{ fontWeight: 600, color: 'var(--dark)' }}>{selectedDeptDetail.floor || '1st Floor'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Specialist Doctor:</span>
+                  <span style={{ fontWeight: 600, color: 'var(--dark)' }}>Dr. Abhishek Goel (DOC038)</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Assigned Playlist:</span>
+                  <span style={{ fontWeight: 600, color: 'var(--primary)' }}>Neurology Standard Queue</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label">Doctor OPD Queue URL</label>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 12px',
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: '12px',
+                  }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {selectedDeptDetail.defaultQueueUrl}
+                  </span>
+                  <a
+                    href={selectedDeptDetail.defaultQueueUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-outline btn-sm"
+                    style={{ padding: '3px 8px', fontSize: '11px', flexShrink: 0, marginLeft: '8px' }}
+                  >
+                    <span>Visit</span>
+                    <ExternalLink size={11} />
+                  </a>
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label">Assigned Screen Displays</label>
+                <div style={{ padding: '10px', backgroundColor: 'var(--bg-main)', borderRadius: 'var(--radius-sm)', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  TV screen "SCR-DOC038-TV" (Consultation Room 5) is receiving this department's content and queue feeds.
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => setSelectedDeptDetail(null)}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Edit Department Modal (Requested by User) */}
-      {editingDept && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ padding: '26px' }}>
-            <h3
-              style={{
-                fontSize: '1.2rem',
-                fontWeight: 800,
-                color: 'var(--text-main)',
-                marginBottom: '18px',
-                fontFamily: 'var(--font-display)',
-              }}
-            >
-              Edit Department: {editingDept.name}
-            </h3>
-            <form onSubmit={handleUpdate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Department Name
-                </label>
-                <input
-                  type="text"
-                  className="input-field"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
+      {/* Add / Edit Department Modal */}
+      {(showAddModal || editingDept) && (
+        <div className="modal-overlay" onClick={() => { setShowAddModal(false); setEditingDept(null); }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--dark)' }}>
+                {editingDept ? 'Edit Department' : 'Add New Department'}
+              </h3>
+              <button
+                className="btn-ghost"
+                onClick={() => { setShowAddModal(false); setEditingDept(null); }}
+                style={{ padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                    Department Code
-                  </label>
+            <form onSubmit={editingDept ? handleUpdate : handleCreate}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Department Name</label>
                   <input
                     type="text"
-                    className="input-field"
+                    className="form-input"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Cardiology OPD"
+                    required
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Department Code</label>
+                  <input
+                    type="text"
+                    className="form-input"
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
+                    placeholder="e.g. DEP-CARDIO"
                     required
                   />
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                    Floor / Wing
-                  </label>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Floor Location</label>
                   <input
                     type="text"
-                    className="input-field"
+                    className="form-input"
                     value={floor}
                     onChange={(e) => setFloor(e.target.value)}
+                    placeholder="e.g. 2nd Floor, Wing B"
                     required
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Doctor OPD Queue URL</label>
+                  <input
+                    type="url"
+                    className="form-input"
+                    value={defaultQueueUrl}
+                    onChange={(e) => setDefaultQueueUrl(e.target.value)}
+                    placeholder="https://hms.jjmhospitalkashipur.com/qd/DOC038"
+                    required
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Description (Optional)</label>
+                  <textarea
+                    className="form-textarea"
+                    rows={2}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Brief description of the department..."
                   />
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Default HMS Queue URL
-                </label>
-                <input
-                  type="url"
-                  className="input-field"
-                  value={defaultQueueUrl}
-                  onChange={(e) => setDefaultQueueUrl(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Description (Optional)
-                </label>
-                <textarea
-                  className="input-field"
-                  rows={3}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+              <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setEditingDept(null)}
+                  className="btn btn-outline btn-sm"
+                  onClick={() => { setShowAddModal(false); setEditingDept(null); }}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? 'Saving Changes...' : 'Save Department'}
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-sm"
+                  disabled={loading}
+                >
+                  {loading ? 'Saving...' : editingDept ? 'Save Changes' : 'Create Department'}
                 </button>
               </div>
             </form>

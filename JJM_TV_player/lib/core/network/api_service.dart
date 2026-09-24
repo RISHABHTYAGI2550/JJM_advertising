@@ -4,6 +4,22 @@ import '../config/app_config.dart';
 import '../storage/storage_service.dart';
 import '../../models/display_models.dart';
 
+class ReconciliationResult {
+  final ResolvedConfig? config;
+  final int configVersion;
+  final int mediaManifestVersion;
+  final Map<String, dynamic>? activeEmergency;
+  final List<dynamic> pendingCommands;
+
+  ReconciliationResult({
+    this.config,
+    required this.configVersion,
+    required this.mediaManifestVersion,
+    this.activeEmergency,
+    required this.pendingCommands,
+  });
+}
+
 class ApiService {
   static String? _resolvedBaseUrl;
 
@@ -76,9 +92,7 @@ class ApiService {
             return data['session'];
           }
         }
-      } catch (_) {
-        // Try next candidate seamlessly in the background
-      }
+      } catch (_) {}
     }
     return null;
   }
@@ -98,16 +112,92 @@ class ApiService {
           return config;
         }
       }
-    } catch (e) {
-      // Failed to reach backend, return cached config
-    }
+    } catch (_) {}
     return await StorageService.getCachedConfig();
   }
 
-  // HTTP Fallback Heartbeat
+  /// Authoritative REST State Reconciliation (Called on Boot & Socket Reconnect)
+  static Future<ReconciliationResult?> reconcileState({
+    required String screenId,
+    int? appliedConfigVersion,
+    int? mediaManifestVersion,
+  }) async {
+    try {
+      final baseUrl = await getBaseUrl();
+      final url = Uri.parse('$baseUrl/api/display/$screenId/reconcile');
+      final res = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'appliedConfigVersion': appliedConfigVersion,
+          'mediaManifestVersion': mediaManifestVersion,
+          'playerVersion': AppConfig.appVersion,
+        }),
+      ).timeout(const Duration(seconds: 8));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true) {
+          ResolvedConfig? config;
+          if (data['config'] != null) {
+            config = ResolvedConfig.fromJson(data['config']);
+            await StorageService.saveCachedConfig(config);
+          }
+          return ReconciliationResult(
+            config: config,
+            configVersion: data['configVersion'] ?? 1,
+            mediaManifestVersion: data['mediaManifestVersion'] ?? 1,
+            activeEmergency: data['activeEmergency'],
+            pendingCommands: data['pendingCommands'] ?? [],
+          );
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Fallback REST Command Acknowledgment
+  static Future<void> acknowledgeCommand({
+    required String screenId,
+    required String commandId,
+    Map<String, dynamic>? resultPayload,
+  }) async {
+    try {
+      final baseUrl = await getBaseUrl();
+      final url = Uri.parse('$baseUrl/api/screens/$screenId/commands/$commandId/ack');
+      await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'resultPayload': resultPayload ?? {}}),
+      ).timeout(const Duration(seconds: 5));
+    } catch (_) {}
+  }
+
+  // Fallback REST Command Failure
+  static Future<void> failCommand({
+    required String screenId,
+    required String commandId,
+    required String errorMessage,
+  }) async {
+    try {
+      final baseUrl = await getBaseUrl();
+      final url = Uri.parse('$baseUrl/api/screens/$screenId/commands/$commandId/fail');
+      await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'errorMessage': errorMessage}),
+      ).timeout(const Duration(seconds: 5));
+    } catch (_) {}
+  }
+
+  // Enhanced HTTP Fallback Heartbeat with rich diagnostics
   static Future<void> sendHeartbeat({
     required String screenId,
     required String currentContent,
+    int? appliedConfigVersion,
+    int? mediaManifestVersion,
+    bool? queueConnected,
+    String? queueLastUpdateAt,
   }) async {
     try {
       final baseUrl = await getBaseUrl();
@@ -118,6 +208,10 @@ class ApiService {
         body: jsonEncode({
           'currentContent': currentContent,
           'playerVersion': AppConfig.appVersion,
+          'appliedConfigVersion': appliedConfigVersion,
+          'mediaManifestVersion': mediaManifestVersion,
+          'queueConnected': queueConnected,
+          'queueLastUpdateAt': queueLastUpdateAt,
         }),
       ).timeout(const Duration(seconds: 5));
     } catch (_) {}

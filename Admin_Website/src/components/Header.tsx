@@ -1,10 +1,12 @@
 import React from 'react';
-import { Plus, Megaphone, ShieldCheck, LogOut, Menu, Server } from 'lucide-react';
+import { Plus, Megaphone, Menu, Server } from 'lucide-react';
 import { getActiveBackendUrl, setBackendTarget } from '../services/api';
 
 interface HeaderProps {
   title: string;
   subtitle?: string;
+  onlineScreensCount?: number;
+  totalScreensCount?: number;
   onOpenPairModal: () => void;
   onOpenGlobalAdModal: () => void;
   onLogout?: () => void;
@@ -14,34 +16,33 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   title,
   subtitle,
+  onlineScreensCount = 0,
+  totalScreensCount = 0,
   onOpenPairModal,
   onOpenGlobalAdModal,
-  onLogout,
   onToggleMobileMenu,
 }) => {
   const activeUrl = getActiveBackendUrl();
   const isLocal = activeUrl.includes('localhost') || activeUrl.includes('127.0.0.1');
+
   return (
     <header
       style={{
-        minHeight: '72px',
-        borderBottom: '1px solid var(--border-color)',
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
+        height: 'var(--header-height)',
+        borderBottom: '1px solid var(--border)',
+        backgroundColor: '#FFFFFF',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '12px 24px',
+        padding: '0 28px',
         position: 'sticky',
         top: 0,
-        zIndex: 50,
-        boxShadow: '0 4px 20px rgba(107, 58, 138, 0.04)',
-        flexWrap: 'wrap',
-        gap: '12px',
+        zIndex: 500,
+        gap: '16px',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      {/* Left: Page Title & Subtitle */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
         {onToggleMobileMenu && (
           <button
             onClick={onToggleMobileMenu}
@@ -55,132 +56,116 @@ export const Header: React.FC<HeaderProps> = ({
               color: 'var(--text-main)',
             }}
           >
-            <Menu size={24} />
+            <Menu size={22} />
           </button>
         )}
-        <div>
+        <div style={{ minWidth: 0 }}>
           <h2
             style={{
-              fontSize: '1.25rem',
-              fontWeight: 800,
-              color: 'var(--text-main)',
+              fontSize: '18px',
+              fontWeight: 700,
+              color: 'var(--dark)',
               lineHeight: 1.2,
-              fontFamily: 'var(--font-display)',
+              letterSpacing: '-0.01em',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
             }}
           >
             {title}
           </h2>
           {subtitle && (
-            <p style={{ fontSize: '0.785rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+            <p
+              style={{
+                fontSize: '12px',
+                color: 'var(--text-secondary)',
+                marginTop: '2px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
               {subtitle}
             </p>
           )}
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-        {/* Backend Server Target Indicator / Toggle */}
-        <button
-          onClick={() => setBackendTarget(isLocal ? 'live' : 'local')}
+      {/* Right: Live TV Status & Action Controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+        {/* Live TV Status Badge */}
+        <div
           style={{
             display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
-            padding: '5px 12px',
-            borderRadius: '20px',
-            border: isLocal ? '1px solid #f59e0b' : '1px solid #10b981',
-            backgroundColor: isLocal ? 'rgba(245, 158, 11, 0.12)' : 'rgba(16, 185, 129, 0.12)',
-            color: isLocal ? '#b45309' : '#047857',
-            fontSize: '0.725rem',
-            fontWeight: 800,
+            padding: '5px 10px',
+            borderRadius: 'var(--radius-sm)',
+            backgroundColor: 'var(--bg-main)',
+            border: '1px solid var(--border)',
+            fontSize: '12px',
+            fontWeight: 600,
+            color: 'var(--text-main)',
+          }}
+          title="Active screen telemetry across the hospital"
+        >
+          <span
+            style={{
+              width: '7px',
+              height: '7px',
+              borderRadius: '50%',
+              backgroundColor: onlineScreensCount > 0 ? 'var(--success)' : 'var(--warning)',
+              display: 'inline-block',
+            }}
+          />
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+            Live System:
+          </span>
+          <span style={{ color: 'var(--dark)', fontWeight: 700 }}>
+            {onlineScreensCount} / {totalScreensCount} TVs Online
+          </span>
+        </div>
+
+        {/* Backend Target Switcher */}
+        <button
+          onClick={() => setBackendTarget(isLocal ? 'live' : 'local')}
+          className="btn-outline btn-sm desktop-only"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '11px',
+            fontWeight: 600,
+            color: isLocal ? '#96600E' : '#0B7A58',
+            backgroundColor: isLocal ? 'var(--warning-subtle)' : 'var(--success-subtle)',
+            borderColor: isLocal ? '#FADCA3' : '#BCEFDE',
             cursor: 'pointer',
           }}
-          title={`Click to switch between Live Cloud and Local Backend (Current: ${activeUrl})`}
+          title={`Click to switch between Cloud and Local server (Current: ${activeUrl})`}
         >
-          <span className={isLocal ? 'pulse-dot-offline' : 'pulse-dot-online'} style={{ width: '7px', height: '7px' }} />
-          <span>{isLocal ? 'DEV: LOCAL (5000)' : 'LIVE CLOUD (RENDER)'}</span>
+          <Server size={13} />
+          <span>{isLocal ? 'Local: 5000' : 'Cloud Server'}</span>
         </button>
 
-        {/* 1-Click Global Campaign Button */}
+        {/* Broadcast to All TVs Quick CTA */}
         <button
           className="btn btn-secondary btn-sm"
           onClick={onOpenGlobalAdModal}
-          title="Instant 1-Click Broadcast across all Hospital TVs"
+          title="Broadcast content immediately across all hospital screens"
         >
-          <Megaphone size={16} color="#6B3A8A" />
-          <span className="hide-on-mobile">1-Click Global Ad</span>
+          <Megaphone size={14} />
+          <span className="desktop-only">Broadcast to All TVs</span>
         </button>
 
-        {/* Pair New TV Button */}
-        <button className="btn btn-primary btn-sm" onClick={onOpenPairModal}>
-          <Plus size={16} />
-          <span className="hide-on-mobile">Pair New TV</span>
-        </button>
-
-        <div
-          style={{
-            width: '1px',
-            height: '24px',
-            backgroundColor: 'var(--border-color)',
-            margin: '0 2px',
-          }}
-        />
-
-        {/* User Badge */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '4px 10px',
-            borderRadius: '24px',
-            backgroundColor: '#FAF8FD',
-            border: '1px solid var(--border-color)',
-          }}
+        {/* Pair New TV CTA */}
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={onOpenPairModal}
+          title="Pair a new TV display with a 6-digit code"
         >
-          <div
-            style={{
-              width: '26px',
-              height: '26px',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #6B3A8A 0%, #9D6BBA 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <ShieldCheck size={14} color="#ffffff" />
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                color: 'var(--text-main)',
-                lineHeight: 1,
-              }}
-            >
-              Admin
-            </div>
-          </div>
-        </div>
-
-        {/* Logout Button */}
-        {onLogout && (
-          <button
-            onClick={onLogout}
-            className="btn btn-secondary btn-sm"
-            style={{
-              borderColor: 'rgba(239, 68, 68, 0.3)',
-              color: '#DC2626',
-              padding: '6px 10px',
-            }}
-            title="Secure Logout from JJM Admin"
-          >
-            <LogOut size={16} />
-            <span className="hide-on-mobile">Logout</span>
-          </button>
-        )}
+          <Plus size={15} />
+          <span>Pair New TV</span>
+        </button>
       </div>
     </header>
   );

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Tv, ExternalLink, CheckCircle } from 'lucide-react';
+import { X, Tv, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Department } from '../types';
 import { api } from '../services/api';
 
@@ -33,20 +33,20 @@ export const PairScreenModal: React.FC<PairScreenModalProps> = ({
     setError(null);
 
     try {
-      if (pairingCode.length !== 6) {
+      if (pairingCode.trim().length !== 6) {
         throw new Error('Pairing code must be exactly 6 digits');
       }
 
       const res = await api.post('/screens/pair', {
         pairingCode: pairingCode.trim(),
         name: screenName.trim(),
-        departmentId: departmentId || (departments[0]?.id || 'GENERAL'),
-        location: location || 'Hospital Ward / Clinic',
+        departmentId: departmentId || (departments[0]?.id || 'DEP-OPD'),
+        location: location.trim() || 'Hospital OPD Clinic',
         queueUrl: queueUrl.trim(),
       });
 
       if (res.data.success) {
-        setSuccessMessage(`TV paired successfully with ${res.data.screen.name}!`);
+        setSuccessMessage(`TV screen "${res.data.screen.name}" successfully paired!`);
         setTimeout(() => {
           onScreenPaired();
           onClose();
@@ -62,260 +62,187 @@ export const PairScreenModal: React.FC<PairScreenModalProps> = ({
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-content" style={{ padding: '28px' }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '20px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        className="modal-content"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: '500px' }}
+      >
+        <div className="modal-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div
               style={{
-                width: '42px',
-                height: '42px',
-                borderRadius: '12px',
-                background:
-                  'linear-gradient(135deg, rgba(107, 58, 138, 0.15) 0%, rgba(157, 107, 186, 0.22) 100%)',
+                width: '36px',
+                height: '36px',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'var(--primary-subtle)',
+                color: 'var(--primary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <Tv size={22} color="#6B3A8A" />
+              <Tv size={18} />
             </div>
             <div>
-              <h3
-                style={{
-                  fontSize: '1.2rem',
-                  fontWeight: 800,
-                  color: 'var(--text-main)',
-                  fontFamily: 'var(--font-display)',
-                }}
-              >
-                Pair Android TV Screen
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--dark)' }}>
+                Pair Android TV Display
               </h3>
-              <p style={{ fontSize: '0.785rem', color: 'var(--text-muted)' }}>
-                Enter the 6-digit code shown on the TV display
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                Enter the 6-digit code shown on the physical TV screen
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-subtle)',
-              cursor: 'pointer',
-            }}
-          >
-            <X size={20} />
+
+          <button className="btn-ghost" onClick={onClose} style={{ padding: '4px' }}>
+            <X size={18} />
           </button>
         </div>
 
-        {error && (
-          <div
-            style={{
-              padding: '12px 14px',
-              borderRadius: '10px',
-              backgroundColor: 'var(--danger-light)',
-              color: '#b91c1c',
-              fontSize: '0.85rem',
-              fontWeight: 600,
-              marginBottom: '18px',
-            }}
-          >
-            {error}
-          </div>
-        )}
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* 6-Digit Pairing Code */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">6-Digit TV Pairing Code</label>
+              <input
+                type="text"
+                className="form-input"
+                style={{
+                  fontSize: '22px',
+                  letterSpacing: '0.25em',
+                  fontWeight: 700,
+                  textAlign: 'center',
+                  fontFamily: 'monospace',
+                  height: '48px',
+                  color: 'var(--primary)',
+                  backgroundColor: 'var(--primary-subtle)',
+                  borderColor: '#D8CBE0',
+                }}
+                maxLength={6}
+                value={pairingCode}
+                onChange={(e) => setPairingCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="••••••"
+                required
+                autoFocus
+              />
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px', textAlign: 'center' }}>
+                Look at the TV screen while the JJM TV Player app is running.
+              </span>
+            </div>
 
-        {successMessage && (
-          <div
-            style={{
-              padding: '12px 16px',
-              borderRadius: '10px',
-              backgroundColor: 'var(--success-light)',
-              color: '#065f46',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              marginBottom: '18px',
-            }}
-          >
-            <CheckCircle size={18} />
-            <span>{successMessage}</span>
-          </div>
-        )}
+            {/* Screen Name */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Display Name</label>
+              <input
+                type="text"
+                className="form-input"
+                value={screenName}
+                onChange={(e) => setScreenName(e.target.value)}
+                placeholder="e.g. OPD Room 5 — Doctor 038 TV"
+                required
+              />
+            </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {/* 6 Digit Pairing Code */}
-          <div>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.775rem',
-                fontWeight: 700,
-                color: 'var(--text-main)',
-                marginBottom: '5px',
-              }}
-            >
-              6-Digit Pairing Code *
-            </label>
-            <input
-              type="text"
-              className="input-field"
-              placeholder="e.g. 583921"
-              maxLength={6}
-              value={pairingCode}
-              onChange={(e) => setPairingCode(e.target.value.replace(/\D/g, ''))}
-              required
-              style={{
-                fontSize: '1.4rem',
-                letterSpacing: '0.25em',
-                textAlign: 'center',
-                fontWeight: 800,
-                color: 'var(--primary)',
-                fontFamily: 'monospace',
-              }}
-            />
-            <span
-              style={{
-                fontSize: '0.725rem',
-                color: 'var(--text-subtle)',
-                marginTop: '4px',
-                display: 'block',
-              }}
-            >
-              Find this 6-digit code on the newly installed Flutter TV Player screen.
-            </span>
-          </div>
-
-          {/* Screen Name */}
-          <div>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.775rem',
-                fontWeight: 700,
-                color: 'var(--text-main)',
-                marginBottom: '5px',
-              }}
-            >
-              Screen Display Name *
-            </label>
-            <input
-              type="text"
-              className="input-field"
-              placeholder="e.g. OPD Room 1 — Doctor Consultation"
-              value={screenName}
-              onChange={(e) => setScreenName(e.target.value)}
-              required
-            />
-          </div>
-
-          {/* Department */}
-          <div>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.775rem',
-                fontWeight: 700,
-                color: 'var(--text-main)',
-                marginBottom: '5px',
-              }}
-            >
-              Hospital Department *
-            </label>
-            <select
-              className="input-field"
-              value={departmentId}
-              onChange={(e) => setDepartmentId(e.target.value)}
-              style={{ cursor: 'pointer' }}
-            >
-              {departments.length > 0 ? (
-                departments.map((d) => (
+            {/* Department */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Hospital Department</label>
+              <select
+                className="form-select"
+                value={departmentId}
+                onChange={(e) => setDepartmentId(e.target.value)}
+                required
+              >
+                {departments.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name} ({d.code})
                   </option>
-                ))
-              ) : (
-                <option value="">General OPD (Default)</option>
-              )}
-            </select>
+                ))}
+              </select>
+            </div>
+
+            {/* Location */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Location / Consultation Room</label>
+              <input
+                type="text"
+                className="form-input"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="e.g. 1st Floor, OPD Ward Room 5"
+                required
+              />
+            </div>
+
+            {/* Doctor Queue URL */}
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Doctor OPD Queue URL</label>
+              <input
+                type="url"
+                className="form-input"
+                value={queueUrl}
+                onChange={(e) => setQueueUrl(e.target.value)}
+                placeholder="https://hms.jjmhospitalkashipur.com/qd/DOC038"
+                required
+              />
+            </div>
+
+            {/* Feedback Notifications */}
+            {successMessage && (
+              <div
+                style={{
+                  padding: '12px',
+                  backgroundColor: 'var(--success-subtle)',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid #C4F0E1',
+                  color: '#0E805E',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                }}
+              >
+                <CheckCircle2 size={16} />
+                <span>{successMessage}</span>
+              </div>
+            )}
+
+            {error && (
+              <div
+                style={{
+                  padding: '12px',
+                  backgroundColor: 'var(--danger-subtle)',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid #F8C8CB',
+                  color: 'var(--danger)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '12px',
+                }}
+              >
+                <AlertCircle size={16} />
+                <span>{error}</span>
+              </div>
+            )}
           </div>
 
-          {/* Location / Room */}
-          <div>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.775rem',
-                fontWeight: 700,
-                color: 'var(--text-main)',
-                marginBottom: '5px',
-              }}
-            >
-              Location / Floor
-            </label>
-            <input
-              type="text"
-              className="input-field"
-              placeholder="e.g. Ground Floor, Wing A, Room 101"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-            />
-          </div>
-
-          {/* Manual Queue URL */}
-          <div>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.775rem',
-                fontWeight: 700,
-                color: 'var(--text-main)',
-                marginBottom: '5px',
-              }}
-            >
-              HMS Live Queue URL *
-            </label>
-            <input
-              type="url"
-              className="input-field"
-              placeholder="https://hms.jjmhospitalkashipur.com/qd/..."
-              value={queueUrl}
-              onChange={(e) => setQueueUrl(e.target.value)}
-              required
-            />
-            <span
-              style={{
-                fontSize: '0.725rem',
-                color: 'var(--text-subtle)',
-                marginTop: '4px',
-                display: 'block',
-              }}
-            >
-              Enter the patient token queue web address for this screen.
-            </span>
-          </div>
-
-          {/* Form Actions */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+          <div className="modal-footer">
             <button
               type="button"
-              className="btn btn-secondary"
+              className="btn btn-outline btn-sm"
               onClick={onClose}
               disabled={loading}
             >
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Pairing TV...' : 'Complete Pairing & Bind Screen'}
+            <button
+              type="submit"
+              className="btn btn-primary btn-sm"
+              disabled={loading || pairingCode.length !== 6}
+            >
+              <Tv size={14} />
+              <span>{loading ? 'Pairing TV...' : 'Pair TV Screen'}</span>
             </button>
           </div>
         </form>

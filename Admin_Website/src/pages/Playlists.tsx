@@ -5,11 +5,15 @@ import {
   Clock,
   Tv,
   Image as ImageIcon,
-  Video,
-  ArrowRight,
-  Edit2,
+  Film,
+  ArrowDown,
   Trash2,
-  CheckCircle,
+  Edit2,
+  CheckCircle2,
+  ArrowUp,
+  X,
+  Layers,
+  ChevronDown,
 } from 'lucide-react';
 import { Playlist, PlaylistItem, MediaItem } from '../types';
 import { api } from '../services/api';
@@ -38,7 +42,41 @@ export const PlaylistsPage: React.FC<PlaylistsPageProps> = ({
     setName('');
     setDescription('');
     setIsDefault(false);
-    setItems([]);
+    // Default hospital sequence: Queue -> Ad -> Queue -> Video -> Queue
+    setItems([
+      {
+        id: '1',
+        type: 'queue',
+        title: 'Doctor OPD Queue Display',
+        duration: 20,
+        order: 1,
+      },
+      {
+        id: '2',
+        type: 'image',
+        title: media[0]?.title || 'Cardiology Health Notice',
+        duration: 10,
+        mediaId: media[0]?.id,
+        mediaUrl: media[0]?.url,
+        order: 2,
+      },
+      {
+        id: '3',
+        type: 'queue',
+        title: 'Doctor OPD Queue Display',
+        duration: 20,
+        order: 3,
+      },
+      {
+        id: '4',
+        type: 'video',
+        title: media.find((m) => m.type === 'video')?.title || 'Hospital Awareness Video',
+        duration: 30,
+        mediaId: media.find((m) => m.type === 'video')?.id,
+        mediaUrl: media.find((m) => m.type === 'video')?.url,
+        order: 4,
+      },
+    ]);
     setShowAddModal(true);
   };
 
@@ -56,9 +94,9 @@ export const PlaylistsPage: React.FC<PlaylistsPageProps> = ({
       type,
       title:
         type === 'queue'
-          ? 'Doctor Live Token Queue'
-          : media[0]?.title || 'Hospital Media Slide',
-      duration: type === 'queue' ? 30 : 15,
+          ? 'Doctor OPD Queue Display'
+          : media[0]?.title || 'Hospital Slide Content',
+      duration: type === 'queue' ? 20 : 15,
       mediaId: type !== 'queue' ? media[0]?.id : undefined,
       mediaUrl: type !== 'queue' ? media[0]?.url : undefined,
       order: items.length + 1,
@@ -70,13 +108,29 @@ export const PlaylistsPage: React.FC<PlaylistsPageProps> = ({
     setItems(items.filter((_, i) => i !== index));
   };
 
-  const handleItemDurationChange = (index: number, newDuration: number) => {
-    setItems(
-      items.map((it, i) => (i === index ? { ...it, duration: Number(newDuration) } : it))
-    );
+  const handleMoveUp = (index: number) => {
+    if (index === 0) return;
+    const newItems = [...items];
+    const temp = newItems[index];
+    newItems[index] = newItems[index - 1];
+    newItems[index - 1] = temp;
+    setItems(newItems);
   };
 
-  const handleItemMediaChange = (index: number, mediaId: string) => {
+  const handleMoveDown = (index: number) => {
+    if (index === items.length - 1) return;
+    const newItems = [...items];
+    const temp = newItems[index];
+    newItems[index] = newItems[index + 1];
+    newItems[index + 1] = temp;
+    setItems(newItems);
+  };
+
+  const handleDurationChange = (index: number, val: number) => {
+    setItems(items.map((it, i) => (i === index ? { ...it, duration: val } : it)));
+  };
+
+  const handleMediaChange = (index: number, mediaId: string) => {
     const m = media.find((item) => item.id === mediaId);
     setItems(
       items.map((it, i) =>
@@ -86,415 +140,387 @@ export const PlaylistsPage: React.FC<PlaylistsPageProps> = ({
               mediaId: m?.id,
               mediaUrl: m?.url,
               title: m?.title || it.title,
-              duration: m?.duration || it.duration,
             }
           : it
       )
     );
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.post('/playlists', {
-        name,
-        description,
-        items,
-        isDefault,
-      });
-      setShowAddModal(false);
+      if (editingPlaylist) {
+        await api.patch(`/playlists/${editingPlaylist.id}`, {
+          name,
+          description,
+          isDefault,
+          items,
+        });
+        setEditingPlaylist(null);
+      } else {
+        await api.post('/playlists', {
+          name,
+          description,
+          isDefault,
+          items,
+        });
+        setShowAddModal(false);
+      }
       onRefresh();
     } catch (err: any) {
       alert(`Error saving playlist: ${err.message}`);
     }
   };
 
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingPlaylist) return;
-    try {
-      await api.patch(`/playlists/${editingPlaylist.id}`, {
-        name,
-        description,
-        items,
-        isDefault,
-      });
-      setEditingPlaylist(null);
-      onRefresh();
-    } catch (err: any) {
-      alert(`Error updating playlist: ${err.message}`);
-    }
-  };
-
   const handleDelete = async (id: string, plName: string) => {
-    if (!confirm(`Are you sure you want to delete playlist: ${plName}?`)) return;
+    if (!confirm(`Are you sure you want to delete playlist: "${plName}"?`)) return;
     try {
       await api.delete(`/playlists/${id}`);
       onRefresh();
     } catch (err: any) {
-      alert(`Delete failed: ${err.message}`);
+      alert(`Error deleting playlist: ${err.message}`);
     }
   };
 
   return (
-    <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Top Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h3
-            style={{
-              fontSize: '1.3rem',
-              fontWeight: 800,
-              color: 'var(--text-main)',
-              fontFamily: 'var(--font-display)',
-            }}
-          >
-            Hospital Playlists & Rotations
-          </h3>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-            Configure playback sequences (e.g. Queue ➔ Promotional Banner ➔ Video ➔ Queue)
+          <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--dark)' }}>
+            Display Playlists
+          </h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            Build visual sequence rotations interleaving doctor OPD queues with informational announcements and videos.
           </p>
         </div>
+
         <button className="btn btn-primary" onClick={openAddModal}>
-          <Plus size={16} /> Create New Playlist
+          <Plus size={15} />
+          <span>+ Create Playlist</span>
         </button>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-        {playlists.length === 0 ? (
-          <div className="glass-card" style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-            <ListVideo size={42} color="var(--primary)" style={{ margin: '0 auto 12px', opacity: 0.6 }} />
-            <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>No Playlists Configured</h4>
-            <p style={{ fontSize: '0.825rem', marginTop: '4px' }}>Click "Create New Playlist" above to set up automated playback loops.</p>
-          </div>
-        ) : (
-          playlists.map((pl) => (
-          <div key={pl.id} className="glass-card">
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                marginBottom: '16px',
-              }}
-            >
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <h4
-                    style={{
-                      fontSize: '1.15rem',
-                      fontWeight: 800,
-                      color: 'var(--text-main)',
-                    }}
-                  >
-                    {pl.name}
-                  </h4>
-                  {pl.isDefault && (
-                    <span
+      {/* Playlist Cards List */}
+      {playlists.length === 0 ? (
+        <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
+          <ListVideo size={38} color="var(--text-muted)" style={{ margin: '0 auto 12px' }} />
+          <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--dark)' }}>
+            No Playlists Configured
+          </h3>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '380px', margin: '4px auto 16px' }}>
+            Configure a playback sequence to alternate OPD patient queue tokens with hospital medical slides.
+          </p>
+          <button className="btn btn-primary btn-sm" onClick={openAddModal}>
+            <Plus size={14} />
+            <span>Create First Sequence</span>
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          {playlists.map((pl) => {
+            const sequenceItems = pl.items && pl.items.length ? pl.items : [];
+            const totalDuration = sequenceItems.reduce((acc, it) => acc + (it.duration || 15), 0);
+
+            return (
+              <div key={pl.id} className="card" style={{ padding: '20px' }}>
+                {/* Header row */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div
                       style={{
-                        padding: '3px 10px',
-                        borderRadius: '12px',
-                        backgroundColor: 'rgba(107, 58, 138, 0.12)',
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: 'var(--radius-sm)',
+                        backgroundColor: 'var(--primary-subtle)',
                         color: 'var(--primary)',
-                        fontSize: '0.725rem',
-                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       }}
                     >
-                      DEFAULT FOR ALL SCREENS
-                    </span>
-                  )}
-                </div>
-                {pl.description && (
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    {pl.description}
-                  </p>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => openEditModal(pl)}
-                >
-                  <Edit2 size={13} />
-                  <span>Edit</span>
-                </button>
-                <button
-                  className="btn btn-danger btn-sm"
-                  onClick={() => handleDelete(pl.id, pl.name)}
-                >
-                  <Trash2 size={13} />
-                  <span>Delete</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Sequence Flow visualization */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                overflowX: 'auto',
-                paddingBottom: '8px',
-              }}
-            >
-              {pl.items.map((item, idx) => (
-                <React.Fragment key={item.id || idx}>
-                  <div
-                    style={{
-                      padding: '10px 14px',
-                      borderRadius: '10px',
-                      backgroundColor:
-                        item.type === 'queue'
-                          ? 'rgba(13, 148, 136, 0.08)'
-                          : 'rgba(107, 58, 138, 0.08)',
-                      border:
-                        item.type === 'queue'
-                          ? '1px solid rgba(13, 148, 136, 0.25)'
-                          : '1px solid rgba(107, 58, 138, 0.25)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {item.type === 'queue' ? (
-                      <Tv size={16} color="#0d9488" />
-                    ) : item.type === 'video' ? (
-                      <Video size={16} color="#9D6BBA" />
-                    ) : (
-                      <ImageIcon size={16} color="#6B3A8A" />
-                    )}
+                      <ListVideo size={18} />
+                    </div>
                     <div>
-                      <div
-                        style={{
-                          fontSize: '0.8rem',
-                          fontWeight: 700,
-                          color: 'var(--text-main)',
-                          maxWidth: '180px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {item.title}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--dark)' }}>
+                          {pl.name}
+                        </h3>
+                        {pl.isDefault && (
+                          <span className="badge badge-purple">
+                            Default Fleet Sequence
+                          </span>
+                        )}
                       </div>
-                      <div
-                        style={{
-                          fontSize: '0.675rem',
-                          color: 'var(--text-muted)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                        }}
-                      >
-                        <Clock size={10} />
-                        {item.duration} seconds
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        {pl.description || 'Continuous OPD Rotation'} • Total Cycle: {totalDuration}s
                       </div>
                     </div>
                   </div>
 
-                  {idx < pl.items.length - 1 && (
-                    <ArrowRight size={14} color="var(--text-subtle)" style={{ flexShrink: 0 }} />
-                  )}
-                </React.Fragment>
-              ))}
-            </div>
-          </div>
-        )))}
-      </div>
-
-      {/* Add / Edit Playlist Modal */}
-      {(showAddModal || editingPlaylist) && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ padding: '26px', maxWidth: '680px' }}>
-            <h3
-              style={{
-                fontSize: '1.2rem',
-                fontWeight: 800,
-                color: 'var(--text-main)',
-                marginBottom: '18px',
-                fontFamily: 'var(--font-display)',
-              }}
-            >
-              {editingPlaylist ? `Edit Playlist: ${editingPlaylist.name}` : 'Create New Playlist'}
-            </h3>
-            <form
-              onSubmit={editingPlaylist ? handleUpdate : handleCreate}
-              style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
-            >
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Playlist Name
-                </label>
-                <input
-                  type="text"
-                  className="input-field"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. OPD Queue & Health Promotion Rotation"
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '5px' }}>
-                  Description
-                </label>
-                <input
-                  type="text"
-                  className="input-field"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Cycle description..."
-                />
-              </div>
-
-              {/* Items Sequencer */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <label style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                    Display Sequence Items ({items.length})
-                  </label>
-                  <div style={{ display: 'flex', gap: '6px' }}>
+                  <div style={{ display: 'flex', gap: '8px' }}>
                     <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => handleAddItem('queue')}
+                      className="btn btn-outline btn-sm"
+                      onClick={() => openEditModal(pl)}
                     >
-                      + Queue (30s)
+                      <Edit2 size={13} />
+                      <span>Edit Sequence</span>
                     </button>
+
                     <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => handleAddItem('image')}
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => handleDelete(pl.id, pl.name)}
+                      style={{ color: 'var(--danger)' }}
+                      title="Delete Playlist"
                     >
-                      + Ad Slide
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
-                    maxHeight: '260px',
-                    overflowY: 'auto',
-                    padding: '8px',
-                    backgroundColor: 'var(--bg-subtle)',
-                    borderRadius: '10px',
-                    border: '1px solid var(--border-color)',
-                  }}
-                >
-                  {items.map((item, index) => (
-                    <div
-                      key={item.id || index}
-                      style={{
-                        padding: '10px 14px',
-                        backgroundColor: '#FFFFFF',
-                        borderRadius: '8px',
-                        border: '1px solid var(--border-color)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '10px',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                        <span
-                          style={{
-                            fontWeight: 800,
-                            fontSize: '0.75rem',
-                            color: 'var(--primary)',
-                            width: '20px',
-                          }}
-                        >
-                          #{index + 1}
+                {/* Visual Sequence Builder Diagram Blocks */}
+                <div style={{ marginTop: '10px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '10px' }}>
+                    Playback Cycle Flow ({sequenceItems.length} Steps)
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      overflowX: 'auto',
+                      paddingBottom: '8px',
+                    }}
+                  >
+                    {sequenceItems.map((item, idx) => {
+                      const isQueue = item.type === 'queue';
+                      const isVid = item.type === 'video';
+
+                      return (
+                        <React.Fragment key={item.id || idx}>
+                          <div
+                            style={{
+                              flexShrink: 0,
+                              minWidth: '150px',
+                              padding: '12px',
+                              borderRadius: 'var(--radius-sm)',
+                              backgroundColor: isQueue ? 'var(--primary-subtle)' : '#FFFFFF',
+                              border: `1px solid ${isQueue ? '#DFD3E7' : 'var(--border)'}`,
+                              boxShadow: 'var(--shadow-subtle)',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                              <span
+                                className={`badge ${
+                                  isQueue ? 'badge-purple' : isVid ? 'badge-info' : 'badge-neutral'
+                                }`}
+                                style={{ fontSize: '9px', padding: '2px 5px' }}
+                              >
+                                {isQueue ? 'OPD Queue' : item.type}
+                              </span>
+                              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                {item.duration}s
+                              </span>
+                            </div>
+
+                            <div
+                              style={{
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                color: 'var(--dark)',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
+                              {item.title}
+                            </div>
+                          </div>
+
+                          {idx < sequenceItems.length - 1 && (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '14px', flexShrink: 0 }}>
+                              ➔
+                            </span>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add / Edit Playlist Modal */}
+      {(showAddModal || editingPlaylist) && (
+        <div className="modal-overlay" onClick={() => { setShowAddModal(false); setEditingPlaylist(null); }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '640px' }}>
+            <div className="modal-header">
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--dark)' }}>
+                {editingPlaylist ? 'Edit Playlist Sequence' : 'Create New Display Sequence'}
+              </h3>
+              <button
+                className="btn-ghost"
+                onClick={() => { setShowAddModal(false); setEditingPlaylist(null); }}
+                style={{ padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSave}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Playlist Name</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Standard OPD Daytime Rotation"
+                    required
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Description</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Short description..."
+                  />
+                </div>
+
+                {/* Sequence Builder Blocks */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <label className="form-label" style={{ marginBottom: 0 }}>Sequence Steps ({items.length})</label>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => handleAddItem('queue')}
+                      >
+                        + Queue
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => handleAddItem('image')}
+                      >
+                        + Image
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => handleAddItem('video')}
+                      >
+                        + Video
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto' }}>
+                    {items.map((item, idx) => (
+                      <div
+                        key={item.id || idx}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 'var(--radius-sm)',
+                          backgroundColor: 'var(--bg-subtle)',
+                          border: '1px solid var(--border)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <button
+                            type="button"
+                            className="btn-ghost"
+                            onClick={() => handleMoveUp(idx)}
+                            disabled={idx === 0}
+                            style={{ padding: '2px' }}
+                          >
+                            <ArrowUp size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-ghost"
+                            onClick={() => handleMoveDown(idx)}
+                            disabled={idx === items.length - 1}
+                            style={{ padding: '2px' }}
+                          >
+                            <ArrowDown size={12} />
+                          </button>
+                        </div>
+
+                        <span className={`badge ${item.type === 'queue' ? 'badge-purple' : 'badge-neutral'}`}>
+                          {item.type}
                         </span>
 
-                        {item.type === 'queue' ? (
-                          <span style={{ fontWeight: 700, fontSize: '0.825rem', color: '#047857' }}>
-                            Live OPD Token Queue Screen
-                          </span>
-                        ) : (
-                          <select
-                            className="input-field"
-                            value={item.mediaId || ''}
-                            onChange={(e) => handleItemMediaChange(index, e.target.value)}
-                            style={{ padding: '6px 10px', fontSize: '0.8rem', flex: 1 }}
-                          >
-                            {media.map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {m.title}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
+                        <div style={{ flex: 1 }}>
+                          {item.type === 'queue' ? (
+                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--dark)' }}>
+                              Doctor OPD Live Queue Display
+                            </div>
+                          ) : (
+                            <select
+                              className="form-select"
+                              style={{ height: '34px', fontSize: '12px' }}
+                              value={item.mediaId || ''}
+                              onChange={(e) => handleMediaChange(idx, e.target.value)}
+                            >
+                              {media.map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  {m.title} ({m.type.toUpperCase()})
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <input
                             type="number"
-                            className="input-field"
+                            className="form-input"
+                            style={{ width: '60px', height: '34px', padding: '4px 6px', fontSize: '12px' }}
                             value={item.duration}
-                            onChange={(e) => handleItemDurationChange(index, Number(e.target.value))}
-                            style={{ width: '65px', padding: '6px 8px', fontSize: '0.8rem' }}
+                            onChange={(e) => handleDurationChange(idx, Number(e.target.value))}
                             min={5}
                             max={300}
                           />
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>sec</span>
+                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>sec</span>
                         </div>
 
                         <button
                           type="button"
-                          onClick={() => handleRemoveItem(index)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#ef4444',
-                            cursor: 'pointer',
-                            padding: '4px',
-                          }}
-                          title="Remove item"
+                          className="btn-ghost"
+                          onClick={() => handleRemoveItem(idx)}
+                          style={{ padding: '4px', color: 'var(--danger)' }}
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Default Toggle */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input
-                  type="checkbox"
-                  id="defaultCheck"
-                  checked={isDefault}
-                  onChange={(e) => setIsDefault(e.target.checked)}
-                />
-                <label
-                  htmlFor="defaultCheck"
-                  style={{ fontSize: '0.825rem', color: 'var(--text-main)', fontWeight: 600, cursor: 'pointer' }}
-                >
-                  Set as Default Playlist for all Hospital TV screens
-                </label>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+              <div className="modal-footer">
                 <button
                   type="button"
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setEditingPlaylist(null);
-                  }}
+                  className="btn btn-outline btn-sm"
+                  onClick={() => { setShowAddModal(false); setEditingPlaylist(null); }}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
+                <button type="submit" className="btn btn-primary btn-sm">
                   {editingPlaylist ? 'Save Changes' : 'Create Playlist'}
                 </button>
               </div>
