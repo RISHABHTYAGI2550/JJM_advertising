@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
@@ -25,18 +25,102 @@ const server = http.createServer(app);
 
 const PORT = Number(process.env.PORT) || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
-const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+
+// --- CORS: Allow production domain + local dev ---
+const ALLOWED_ORIGINS = [
+  'https://jjm-advertising.onrender.com',
+  'https://jjm-admin.onrender.com',
+  // Local dev origins
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+];
+// Allow all if CORS_ORIGIN is * or explicit override
+const CORS_ORIGIN_ENV = process.env.CORS_ORIGIN;
+const corsOriginFn = CORS_ORIGIN_ENV === '*'
+  ? true
+  : (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      if (!origin || ALLOWED_ORIGINS.includes(origin) || CORS_ORIGIN_ENV === origin) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS policy: Origin ${origin} not allowed`));
+      }
+    };
 
 export const io = new SocketIOServer(server, {
   cors: {
-    origin: CORS_ORIGIN,
+    origin: CORS_ORIGIN_ENV === '*' ? '*' : ALLOWED_ORIGINS,
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    credentials: true,
   },
 });
 
-app.use(cors({ origin: CORS_ORIGIN }));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.disable('x-powered-by'); // Don't leak Express version
+app.use(cors({ origin: corsOriginFn, credentials: true }));
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: true, limit: '20mb' }));
+
+// ─── Simple in-memory rate limiter for pairing endpoint ─────────────────────
+const pairRateMap = new Map<string, { count: number; resetAt: number }>();
+const pairingRateLimiter = (req: Request, res: Response, next: NextFunction) => {
+  const ip = req.ip || 'unknown';
+  const now = Date.now();
+  const entry = pairRateMap.get(ip);
+  if (entry && entry.resetAt > now) {
+    if (entry.count >= 10) {
+      return res.status(429).json({ success: false, message: 'Too many pairing attempts. Please wait 60 seconds.' });
+    }
+    entry.count++;
+  } else {
+    pairRateMap.set(ip, { count: 1, resetAt: now + 60_000 });
+  }
+  return next();
+};
+
+// ─── Admin token authentication middleware ──────────────────────────────────
+// Active admin sessions (in-memory; survives restarts for ~24h)
+const adminSessions = new Map<string, { createdAt: number }>();
+
+export function createAdminSession(): string {
+  const token = `ADM-${Date.now().toString(36)}-${Math.random().toString(36).substring(2)}`;
+  adminSessions.set(token, { createdAt: Date.now() });
+  // Auto-expire after 24h
+  setTimeout(() => adminSessions.delete(token), 24 * 60 * 60 * 1000);
+  return token;
+}
+
+const requireAdminAuth = (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.headers['x-admin-token'] as string;
+  if (token && adminSessions.has(token)) {
+    return next();
+  }
+  return res.status(401).json({ success: false, message: 'Unauthorized. Admin session required.' });
+};
+
+// ─── Admin login route (server-side credential check) ──────────────────────
+app.post('/api/auth/login', (req: Request, res: Response) => {
+  const { email, password, pin } = req.body;
+  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'JJMads@Vibesoft.in';
+  const ADMIN_PASS = process.env.ADMIN_PASSWORD || 'JJM@#ads';
+  const ADMIN_PIN = process.env.ADMIN_PIN || '935989';
+
+  if (email?.trim() !== ADMIN_EMAIL || password?.trim() !== ADMIN_PASS || String(pin) !== ADMIN_PIN) {
+    return res.status(401).json({ success: false, message: 'Invalid credentials or PIN' });
+  }
+
+  const token = createAdminSession();
+  return res.json({ success: true, token, email: ADMIN_EMAIL });
+});
+
+// ─── Admin logout ───────────────────────────────────────────────────────────
+app.post('/api/auth/logout', (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.headers['x-admin-token'] as string;
+  if (token) adminSessions.delete(token);
+  return res.json({ success: true });
+});
+
 
 // Serve static uploaded media with open CORS
 app.use(
@@ -50,14 +134,24 @@ app.use(
 );
 
 // Mount API routes
-app.use('/api/screens', screensRouter);
-app.use('/api/departments', departmentsRouter);
-app.use('/api/media', mediaRouter);
-app.use('/api/campaigns', campaignsRouter);
-app.use('/api/playlists', playlistsRouter);
+// TV Display Routes (Public — no admin token required, TV clients only need screenId)
 app.use('/api/display', displayRouter);
-app.use('/api/audit-logs', auditRouter);
-app.use('/api/emergency', emergencyRouter);
+
+// TV Pairing Session (Public — TV calls this on boot to get pairing code, no admin token)
+app.post('/api/screens/pair-session', pairingRateLimiter, (req, res, next) => {
+  // Delegate to screensRouter's pair-session handler directly
+  screensRouter(req, res, next);
+});
+
+// Admin Management Routes (Require admin session token)
+app.use('/api/screens', requireAdminAuth, screensRouter);
+app.use('/api/departments', requireAdminAuth, departmentsRouter);
+app.use('/api/media', requireAdminAuth, mediaRouter);
+app.use('/api/campaigns', requireAdminAuth, campaignsRouter);
+app.use('/api/playlists', requireAdminAuth, playlistsRouter);
+app.use('/api/audit-logs', requireAdminAuth, auditRouter);
+app.use('/api/emergency', requireAdminAuth, emergencyRouter);
+
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

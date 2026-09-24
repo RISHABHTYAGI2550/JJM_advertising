@@ -18,6 +18,7 @@ class _PairingViewState extends State<PairingView> {
   bool _isLoading = true;
   String _statusMessage = "Connecting to JJM Hospital Control Server...";
   bool _isServerConnected = false;
+  bool _isRetrying = false; // Guard: prevent concurrent background retries
   Timer? _refreshTimer;
   Timer? _autoRetryTimer;
 
@@ -49,10 +50,15 @@ class _PairingViewState extends State<PairingView> {
 
   Future<void> _silentBackgroundRetry() async {
     if (_isServerConnected && _pairingCode != "------") return;
-
-    final session = await ApiService.requestPairingSession();
-    if (session != null && session['pairingCode'] != null && mounted) {
-      _applyPairingSession(session);
+    if (_isRetrying) return; // Already in-flight, skip
+    _isRetrying = true;
+    try {
+      final session = await ApiService.requestPairingSession();
+      if (session != null && session['pairingCode'] != null && mounted) {
+        _applyPairingSession(session);
+      }
+    } finally {
+      _isRetrying = false;
     }
   }
 

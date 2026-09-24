@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { Dashboard } from './pages/Dashboard';
@@ -18,8 +18,8 @@ import { PairScreenModal } from './components/PairScreenModal';
 import { ScreenDetailModal } from './components/ScreenDetailModal';
 import { OneClickGlobalModal } from './components/OneClickGlobalModal';
 import { Screen, Department, MediaItem, Playlist, Campaign, AuditLog } from './types';
-import { api } from './services/api';
-import { getSocket } from './services/socket';
+import { api, clearAdminToken } from './services/api';
+import { getSocket, disconnectSocket } from './services/socket';
 
 export const App: React.FC = () => {
   // Public Display Screen Route Check (e.g. /display/SCR-DOC038 or ?display=SCR-DOC038)
@@ -58,13 +58,17 @@ export const App: React.FC = () => {
   const [isGlobalModalOpen, setIsGlobalModalOpen] = useState(false);
   const [selectedScreen, setSelectedScreen] = useState<Screen | null>(null);
 
-  const handleLogout = () => {
+  const fetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleLogout = useCallback(() => {
     try {
-      localStorage.removeItem('jjm_auth_user');
-      localStorage.removeItem('jjm_auth_token');
+      api.post('/auth/logout').catch(() => {});
+      clearAdminToken();
+      disconnectSocket();
     } catch {}
     setIsAuthenticated(false);
-  };
+  }, []);
+
 
   // Fetch all initial data
   const fetchData = async () => {
@@ -100,20 +104,29 @@ export const App: React.FC = () => {
 
     fetchData();
 
+    // Handle server-side auth expiry (401 from any API call)
+    const handleAuthExpired = () => handleLogout();
+    window.addEventListener('jjm:auth:expired', handleAuthExpired);
+
     // Setup real-time Socket.IO listeners
     const socket = getSocket();
 
-    socket.on('screens:changed', () => {
-      fetchData();
-    });
+    // Debounced full-refresh: screens:changed fires on every heartbeat (50+/min)
+    // Only trigger full re-fetch at most once every 2 seconds
+    const debouncedFetch = () => {
+      if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
+      fetchDebounceRef.current = setTimeout(() => { fetchData(); }, 2000);
+    };
 
-    socket.on('screen:status_change', ({ screenId, status }) => {
+    socket.on('screens:changed', debouncedFetch);
+
+    socket.on('screen:status_change', ({ screenId, status, healthStatus }) => {
       setScreens((prev) =>
-        prev.map((s) => (s.id === screenId ? { ...s, connectionStatus: status } : s))
+        prev.map((s) => (s.id === screenId ? { ...s, connectionStatus: status, healthStatus: healthStatus || s.healthStatus } : s))
       );
     });
 
-    socket.on('screen:heartbeat_received', ({ screenId, currentContent }) => {
+    socket.on('screen:heartbeat_received', ({ screenId, currentContent, healthStatus, appliedConfigVersion, targetConfigVersion }) => {
       setScreens((prev) =>
         prev.map((s) =>
           s.id === screenId
@@ -122,28 +135,29 @@ export const App: React.FC = () => {
                 connectionStatus: 'online',
                 lastHeartbeat: new Date().toISOString(),
                 currentContent: currentContent || s.currentContent,
+                healthStatus: healthStatus || s.healthStatus,
+                appliedConfigVersion: appliedConfigVersion ?? s.appliedConfigVersion,
+                targetConfigVersion: targetConfigVersion ?? s.targetConfigVersion,
               }
             : s
         )
       );
     });
 
-    socket.on('emergency:broadcast', () => {
-      setHasActiveEmergency(true);
-    });
-
-    socket.on('emergency:dismiss', () => {
-      setHasActiveEmergency(false);
-    });
+    socket.on('emergency:broadcast', () => { setHasActiveEmergency(true); });
+    socket.on('emergency:dismiss', () => { setHasActiveEmergency(false); });
 
     return () => {
-      socket.off('screens:changed');
+      window.removeEventListener('jjm:auth:expired', handleAuthExpired);
+      socket.off('screens:changed', debouncedFetch);
       socket.off('screen:status_change');
       socket.off('screen:heartbeat_received');
       socket.off('emergency:broadcast');
       socket.off('emergency:dismiss');
+      if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, handleLogout]);
+
 
   // Standalone Public TV Display Route (Bypasses admin login)
   if (displayScreenId) {

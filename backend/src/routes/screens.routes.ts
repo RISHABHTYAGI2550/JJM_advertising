@@ -3,6 +3,7 @@ import { screenRepo } from '../db/repositories/screenRepository';
 import { deviceRepo } from '../db/repositories/deviceRepository';
 import { commandRepo } from '../db/repositories/commandRepository';
 import { auditRepo } from '../db/repositories/miscRepositories';
+import { departmentRepo } from '../db/repositories/departmentRepository';
 import { pairingService } from '../services/pairingService';
 import { resolverService } from '../services/resolverService';
 import { commandService } from '../services/commandService';
@@ -87,6 +88,14 @@ router.patch('/:id', (req: Request, res: Response) => {
     return res.status(404).json({ success: false, message: 'Screen not found' });
   }
 
+  // Validate departmentId if provided
+  if (req.body.departmentId) {
+    const dept = departmentRepo.getById(req.body.departmentId);
+    if (!dept) {
+      return res.status(400).json({ success: false, message: `Department '${req.body.departmentId}' not found` });
+    }
+  }
+
   // Increment authoritative target config version so version divergence is tracked
   const newTargetVersion = existing.targetConfigVersion + 1;
 
@@ -104,6 +113,7 @@ router.patch('/:id', (req: Request, res: Response) => {
   auditRepo.log('UPDATE_SCREEN', 'Screen', existing.id, `Updated screen params (targetConfigVersion: ${newTargetVersion})`);
   return res.json({ success: true, screen: updated });
 });
+
 
 // POST TV generates pairing code
 router.post('/pair-session', (req: Request, res: Response) => {

@@ -351,7 +351,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
 
         case 'CLEAR_CACHE':
           SocketService.sendCommandApplied(commandId);
-          await StorageService.clearCredentials();
+          // Only clear WebView cache — DO NOT clear credentials (would force re-pair)
           if (_webViewController != null && !kIsWeb) {
             await _webViewController!.clearCache();
           }
@@ -497,10 +497,13 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
       final controller = VideoPlayerController.networkUrl(Uri.parse(url));
       controller.initialize().then((_) {
         if (mounted && _currentState == DisplayState.AD_PLAYBACK) {
+          controller.setLooping(true); // Loop video so screen doesn't go black
           setState(() {
             _videoController = controller;
           });
           controller.play();
+        } else {
+          controller.dispose(); // Mounted check failed, discard
         }
       }).catchError((_) {
         _nextPlaylistItem();

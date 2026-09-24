@@ -37,7 +37,7 @@ export const PairScreenModal: React.FC<PairScreenModalProps> = ({
         throw new Error('Pairing code must be exactly 6 digits');
       }
 
-      const res = await api.post('/screens/pair', {
+      const res = await api.post('/screens/pair-claim', {
         pairingCode: pairingCode.trim(),
         name: screenName.trim(),
         departmentId: departmentId || (departments[0]?.id || 'DEP-OPD'),

@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { ShieldCheck, Lock, Mail, KeyRound, ArrowRight, Activity, AlertCircle } from 'lucide-react';
+import { api, setAdminToken } from '../services/api';
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -25,35 +26,25 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const handleCredentialsSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
-
-    setTimeout(() => {
-      setLoading(false);
-      const trimmedEmail = email.trim();
-      const trimmedPassword = password.trim();
-
-      if (trimmedEmail === 'JJMads@Vibesoft.in' && trimmedPassword === 'JJM@#ads') {
-        setStep('pin');
-        setTimeout(() => {
-          pinRefs[0].current?.focus();
-        }, 100);
-      } else {
-        setError('Invalid Administrator ID or Password. Access denied.');
-      }
-    }, 400);
+    // Move to PIN step — final auth done server-side in verifyPin
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+    if (!trimmedEmail || !trimmedPassword) {
+      setError('Please enter your email and password.');
+      return;
+    }
+    setStep('pin');
+    setTimeout(() => { pinRefs[0].current?.focus(); }, 100);
   };
 
   const handlePinChange = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
-
     const newPin = [...pin];
     newPin[index] = value.slice(-1);
     setPin(newPin);
-
     if (value && index < 5) {
       pinRefs[index + 1].current?.focus();
     }
-
     const fullPin = newPin.join('');
     if (fullPin.length === 6) {
       verifyPin(fullPin);
@@ -66,27 +57,39 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  const verifyPin = (fullPin: string) => {
+  const verifyPin = async (fullPin: string) => {
     setError(null);
     setLoading(true);
-
-    setTimeout(() => {
-      setLoading(false);
-      if (fullPin === '935989') {
-        localStorage.setItem('jjm_auth_user', 'JJMads@Vibesoft.in');
-        localStorage.setItem('jjm_auth_token', 'AUTH_' + Date.now());
+    try {
+      // Server-side authentication — credentials are NOT stored in client bundle
+      const res = await api.post('/auth/login', {
+        email: email.trim(),
+        password: password.trim(),
+        pin: fullPin,
+      });
+      if (res.data.success && res.data.token) {
+        setAdminToken(res.data.token);
+        localStorage.setItem('jjm_auth_user', res.data.email || email.trim());
         onLoginSuccess();
       } else {
-        setError('Invalid Security PIN! Please enter the authorized 6-digit PIN.');
+        setError('Authentication failed. Please try again.');
         setPin(['', '', '', '', '', '']);
         pinRefs[0].current?.focus();
       }
-    }, 300);
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Invalid credentials or PIN. Access denied.';
+      setError(msg);
+      setPin(['', '', '', '', '', '']);
+      pinRefs[0].current?.focus();
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleManualPinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    verifyPin(pin.join(''));
+    const fullPin = pin.join('');
+    if (fullPin.length === 6) verifyPin(fullPin);
   };
 
   return (
@@ -126,7 +129,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           >
             <Activity size={28} strokeWidth={2.4} />
           </div>
-
           <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--dark)' }}>
             JJM Hospital Kashipur
           </h1>
@@ -159,7 +161,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         {step === 'credentials' ? (
           <form onSubmit={handleCredentialsSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">Administrator ID</label>
+              <label className="form-label">Administrator Email</label>
               <div style={{ position: 'relative' }}>
                 <input
                   type="email"
@@ -167,15 +169,12 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                   style={{ paddingLeft: '36px' }}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="e.g. JJMads@Vibesoft.in"
+                  placeholder="admin@hospital.com"
                   required
                   autoFocus
+                  autoComplete="email"
                 />
-                <Mail
-                  size={16}
-                  color="var(--text-muted)"
-                  style={{ position: 'absolute', left: '12px', top: '12px' }}
-                />
+                <Mail size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '12px' }} />
               </div>
             </div>
 
@@ -190,12 +189,9 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
+                  autoComplete="current-password"
                 />
-                <Lock
-                  size={16}
-                  color="var(--text-muted)"
-                  style={{ position: 'absolute', left: '12px', top: '12px' }}
-                />
+                <Lock size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '12px' }} />
               </div>
             </div>
 
@@ -205,33 +201,9 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               disabled={loading}
               style={{ width: '100%', marginTop: '8px' }}
             >
-              <span>{loading ? 'Authenticating...' : 'Sign In to Control Center'}</span>
+              <span>Continue to PIN Verification</span>
               <ArrowRight size={16} />
             </button>
-
-            {/* Quick Demo Pre-fill Helper */}
-            <div
-              style={{
-                marginTop: '12px',
-                padding: '10px',
-                backgroundColor: 'var(--bg-subtle)',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--border)',
-                textAlign: 'center',
-              }}
-            >
-              <button
-                type="button"
-                className="btn-ghost"
-                onClick={() => {
-                  setEmail('JJMads@Vibesoft.in');
-                  setPassword('JJM@#ads');
-                }}
-                style={{ fontSize: '11px', color: 'var(--primary)', cursor: 'pointer', padding: '2px 8px' }}
-              >
-                Auto-fill Authorized Hospital Credentials
-              </button>
-            </div>
           </form>
         ) : (
           /* Step 2: 6-Digit Security PIN */
@@ -266,6 +238,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                   key={index}
                   ref={pinRefs[index]}
                   type="text"
+                  inputMode="numeric"
                   maxLength={1}
                   value={digit}
                   onChange={(e) => handlePinChange(index, e.target.value)}
@@ -293,7 +266,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               disabled={loading || pin.join('').length !== 6}
               style={{ width: '100%' }}
             >
-              <span>{loading ? 'Verifying PIN...' : 'Verify & Launch Dashboard'}</span>
+              <span>{loading ? 'Verifying...' : 'Verify & Launch Dashboard'}</span>
               <ShieldCheck size={16} />
             </button>
 
@@ -301,7 +274,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               <button
                 type="button"
                 className="btn-ghost"
-                onClick={() => setStep('credentials')}
+                onClick={() => { setStep('credentials'); setPin(['', '', '', '', '', '']); setError(null); }}
                 style={{ fontSize: '12px', color: 'var(--text-secondary)' }}
               >
                 ← Back to credentials

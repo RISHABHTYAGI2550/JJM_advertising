@@ -48,8 +48,10 @@ export class PairingService {
       throw new Error('Pairing code has expired or is already used');
     }
 
-    const screenCode = data.code || `SCR-${Math.floor(100 + Math.random() * 900)}`;
-    const screenId = data.code && data.code.startsWith('SCR-') ? data.code : `SCR-${screenCode}`;
+    // Generate a clean numeric code (e.g. "342") and a prefixed ID (e.g. "SCR-342")
+    const rawCode = data.code?.replace(/^SCR-/i, '') || Math.floor(100 + Math.random() * 900).toString();
+    const screenCode = rawCode;
+    const screenId = data.code?.startsWith('SCR-') ? data.code : `SCR-${rawCode}`;
     const deviceToken = `DEV-${uuidv4()}`;
     const deviceId = `HW-${uuidv4().substring(0, 8).toUpperCase()}`;
 
@@ -85,7 +87,7 @@ export class PairingService {
       screen = screenRepo.create({
         id: screenId,
         name: data.name,
-        code: screenCode,
+        code: screenId, // store full ID as code for display
         departmentId: data.departmentId,
         deviceId,
         location: data.location,
