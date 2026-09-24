@@ -142,7 +142,7 @@ export interface Campaign {
   name: string;
   description: string;
   type: 'global' | 'department' | 'screen' | 'emergency';
-  contentType?: 'playlist' | 'single_image' | 'single_image_only' | 'only_queue';
+  contentType?: 'playlist' | 'single_image' | 'single_image_only' | 'image' | 'video' | 'single_video' | 'single_video_only' | 'only_queue' | string;
   targetIds: string[]; // ["all"] or department IDs or screen IDs
   mediaId?: string;
   mediaUrl?: string;

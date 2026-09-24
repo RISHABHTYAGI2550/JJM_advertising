@@ -202,8 +202,8 @@ router.delete('/:id', (req: Request, res: Response) => {
 // TARGETED TV COMMAND CENTER ENDPOINTS (V2)
 // ==========================================
 
-// POST Dispatch targeted command to exact physical screen
-router.post('/:id/commands', async (req: Request, res: Response) => {
+// POST Dispatch targeted command to exact physical screen (supports both /command and /commands)
+router.post(['/:id/commands', '/:id/command'], async (req: Request, res: Response) => {
   const { commandType, payload } = req.body;
   if (!commandType) {
     return res.status(400).json({ success: false, message: 'commandType is required' });
@@ -217,40 +217,80 @@ router.post('/:id/commands', async (req: Request, res: Response) => {
   }
 });
 
-// GET Recent commands for a screen
-router.get('/:id/commands', (req: Request, res: Response) => {
+// GET Recent commands for a screen (supports both /commands and /command/history)
+router.get(['/:id/commands', '/:id/command/history'], (req: Request, res: Response) => {
   const commands = commandRepo.getRecentForScreen(req.params.id, 15);
   return res.json({ success: true, commands });
 });
 
 // POST TV acknowledges receipt of command (STAGE: RECEIVED)
-router.post('/:id/commands/:commandId/received', (req: Request, res: Response) => {
+router.post(['/:id/commands/:commandId/received', '/:id/command/:commandId/received'], (req: Request, res: Response) => {
   const cmd = commandService.handleReceived(req.params.commandId, req.params.id);
   return res.json({ success: true, command: cmd });
 });
 
 // POST TV reports command applied (STAGE: APPLIED)
-router.post('/:id/commands/:commandId/applied', (req: Request, res: Response) => {
+router.post(['/:id/commands/:commandId/applied', '/:id/command/:commandId/applied'], (req: Request, res: Response) => {
   const cmd = commandService.handleApplied(req.params.commandId, req.params.id);
   return res.json({ success: true, command: cmd });
 });
 
 // POST TV acknowledges command completion (STAGE: ACKNOWLEDGED)
-router.post('/:id/commands/:commandId/ack', (req: Request, res: Response) => {
+router.post(['/:id/commands/:commandId/ack', '/:id/command/:commandId/ack'], (req: Request, res: Response) => {
   const { resultPayload } = req.body;
   const cmd = commandService.handleAcknowledged(req.params.commandId, req.params.id, resultPayload);
   return res.json({ success: true, command: cmd });
 });
 
 // POST TV reports command failure (STAGE: FAILED)
-router.post('/:id/commands/:commandId/fail', (req: Request, res: Response) => {
+router.post(['/:id/commands/:commandId/fail', '/:id/command/:commandId/fail'], (req: Request, res: Response) => {
   const { errorMessage } = req.body;
   const cmd = commandService.handleFailed(req.params.commandId, req.params.id, errorMessage || 'Unknown execution error');
   return res.json({ success: true, command: cmd });
 });
 
+// POST Toggle screen pause/resume
+router.post('/:id/toggle-pause', (req: Request, res: Response) => {
+  const screen = screenRepo.getById(req.params.id);
+  if (!screen) {
+    return res.status(404).json({ success: false, message: 'Screen not found' });
+  }
+  const newPaused = !screen.isPaused;
+  const updated = screenRepo.update(screen.id, { isPaused: newPaused });
+
+  if (io) {
+    const config = resolverService.resolveScreenConfig(screen.id);
+    io.to(`screen:${screen.id}`).emit('config:update', { config });
+    io.emit('screens:changed');
+  }
+
+  auditRepo.log('TOGGLE_PAUSE', 'Screen', screen.id, `Toggled playback pause: ${newPaused ? 'PAUSED' : 'RESUMED'}`);
+  return res.json({ success: true, isPaused: newPaused, screen: updated });
+});
+
+// POST Update screen hardware power state
+router.post('/:id/power', (req: Request, res: Response) => {
+  const { state } = req.body;
+  const screen = screenRepo.getById(req.params.id);
+  if (!screen) {
+    return res.status(404).json({ success: false, message: 'Screen not found' });
+  }
+
+  const powerState = state === 'off' ? 'off' : 'on';
+  const updated = screenRepo.update(screen.id, { powerState });
+
+  if (io) {
+    const config = resolverService.resolveScreenConfig(screen.id);
+    io.to(`screen:${screen.id}`).emit('config:update', { config });
+    io.emit('screens:changed');
+  }
+
+  auditRepo.log('POWER_STATE', 'Screen', screen.id, `Set screen power state to ${powerState}`);
+  return res.json({ success: true, powerState, screen: updated });
+});
+
 // Backwards-compatible convenience routes routing to the formal Command Lifecycle
-router.post('/:id/refresh', async (req: Request, res: Response) => {
+router.post(['/:id/refresh', '/:id/sync'], async (req: Request, res: Response) => {
   const command = await commandService.dispatchCommand(req.params.id, 'SYNC_CONFIG');
   return res.json({ success: true, message: 'Sync config command dispatched', command });
 });
@@ -260,7 +300,7 @@ router.post('/:id/reload-queue', async (req: Request, res: Response) => {
   return res.json({ success: true, message: 'Reload queue command dispatched', command });
 });
 
-router.post('/:id/restart-player', async (req: Request, res: Response) => {
+router.post(['/:id/restart-player', '/:id/restart'], async (req: Request, res: Response) => {
   const command = await commandService.dispatchCommand(req.params.id, 'RESTART_PLAYER');
   return res.json({ success: true, message: 'Restart player command dispatched', command });
 });

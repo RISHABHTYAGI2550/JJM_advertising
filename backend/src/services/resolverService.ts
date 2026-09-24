@@ -121,47 +121,78 @@ export class ResolverService {
   ): ResolvedDisplayConfig {
     let items: PlaylistItem[] = [];
 
-    if (campaign.contentType === 'only_queue') {
-      items = [{ id: 'camp-q-only', type: 'queue', title: 'Doctor Live Token Queue', duration: 30, order: 1 }];
-    } else if (campaign.contentType === 'single_image_only') {
-      const media = campaign.mediaId ? mediaRepo.getById(campaign.mediaId) : undefined;
-      const mediaUrl = campaign.mediaUrl || media?.url || '';
-      items = [
-        {
-          id: 'camp-img-only',
-          type: 'image',
-          mediaId: campaign.mediaId,
-          mediaUrl,
-          title: campaign.name,
-          duration: media?.duration || 20,
-          order: 1,
-        },
-      ];
-    } else if (campaign.contentType === 'single_image' || (!campaign.contentType && campaign.mediaId && !campaign.playlistId)) {
-      const media = campaign.mediaId ? mediaRepo.getById(campaign.mediaId) : undefined;
-      const mediaUrl = campaign.mediaUrl || media?.url || '';
-      items = [
-        {
-          id: 'camp-q-1',
-          type: 'queue',
-          title: 'Doctor Live Token Queue',
-          duration: 30,
-          order: 1,
-        },
-        {
-          id: 'camp-img-1',
-          type: 'image',
-          mediaId: campaign.mediaId,
-          mediaUrl,
-          title: campaign.name,
-          duration: media?.duration || 15,
-          order: 2,
-        },
-      ];
-    } else if (campaign.playlistId) {
+    // 1. Explicit playlist campaign
+    if (campaign.playlistId) {
       const pl = playlistRepo.getById(campaign.playlistId);
       if (pl && pl.items.length) {
         items = pl.items;
+      }
+    }
+
+    // 2. Only queue campaign
+    if (!items.length && campaign.contentType === 'only_queue') {
+      items = [{ id: 'camp-q-only', type: 'queue', title: 'Doctor Live Token Queue', duration: 30, order: 1 }];
+    }
+
+    // 3. Media-based campaign (Image / Video / Banner)
+    if (!items.length && (campaign.mediaId || campaign.mediaUrl)) {
+      const media = campaign.mediaId ? mediaRepo.getById(campaign.mediaId) : undefined;
+      const mediaUrl = campaign.mediaUrl || media?.url || '';
+
+      const isVideo =
+        media?.type === 'video' ||
+        campaign.contentType === 'video' ||
+        campaign.contentType === 'single_video' ||
+        campaign.contentType === 'single_video_only' ||
+        mediaUrl.toLowerCase().endsWith('.mp4') ||
+        mediaUrl.toLowerCase().endsWith('.webm');
+
+      const itemType: 'image' | 'video' = isVideo ? 'video' : 'image';
+      const adDuration =
+        campaign.displayDurationSeconds && campaign.displayDurationSeconds > 0
+          ? campaign.displayDurationSeconds
+          : media?.duration && media.duration > 0
+          ? media.duration
+          : 15;
+
+      const queueDuration =
+        campaign.intervalMinutes && campaign.intervalMinutes > 0
+          ? Math.max(15, campaign.intervalMinutes * 60)
+          : 30;
+
+      if (campaign.contentType === 'single_image_only' || campaign.contentType === 'single_video_only') {
+        // Fullscreen ad only (no queue)
+        items = [
+          {
+            id: `camp-ad-${campaign.id}`,
+            type: itemType,
+            mediaId: campaign.mediaId,
+            mediaUrl,
+            title: campaign.name,
+            duration: adDuration,
+            order: 1,
+          },
+        ];
+      } else {
+        // Alternating Doctor OPD Queue and Campaign Ad
+        items = [
+          {
+            id: `camp-q-${campaign.id}`,
+            type: 'queue',
+            title: 'Doctor Live Token Queue',
+            duration: queueDuration,
+            order: 1,
+          },
+          {
+            id: `camp-ad-${campaign.id}`,
+            type: itemType,
+            mediaId: campaign.mediaId,
+            mediaUrl,
+            title: campaign.name,
+            duration: adDuration,
+            order: 2,
+          },
+        ];
       }
     }
 
