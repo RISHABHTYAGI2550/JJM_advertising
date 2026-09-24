@@ -13,7 +13,7 @@ import {
   Server,
   RefreshCw,
 } from 'lucide-react';
-import { getActiveBackendUrl, setBackendTarget } from '../services/api';
+import { getActiveBackendUrl } from '../services/api';
 
 export const SettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
@@ -34,7 +34,6 @@ export const SettingsPage: React.FC = () => {
   const [savedFeedback, setSavedFeedback] = useState<string | null>(null);
 
   const activeUrl = getActiveBackendUrl();
-  const isLocal = activeUrl.includes('localhost') || activeUrl.includes('127.0.0.1');
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -273,10 +272,10 @@ export const SettingsPage: React.FC = () => {
               <>
                 <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px' }}>
                   <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--dark)' }}>
-                    Network & Backend Target
+                    Network & Backend Server
                   </h3>
                   <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    Toggle between production cloud and local staging servers.
+                    Authoritative Cloud Server connection for hospital signage and queue orchestration.
                   </p>
                 </div>
 
@@ -284,41 +283,15 @@ export const SettingsPage: React.FC = () => {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px', backgroundColor: 'var(--bg-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
                     <div>
                       <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--dark)' }}>
-                        Current Active Server Target
+                        Production Cloud Backend URL
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--primary)', fontFamily: 'monospace', marginTop: '2px' }}>
                         {activeUrl}
                       </div>
                     </div>
                     <span className="badge badge-online">
-                      {isLocal ? 'Local Dev (5000)' : 'Production Cloud'}
+                      Production Cloud (Active)
                     </span>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button
-                      type="button"
-                      className="btn btn-outline btn-sm"
-                      onClick={() => {
-                        setBackendTarget('live');
-                        window.location.reload();
-                      }}
-                    >
-                      <Server size={14} />
-                      <span>Switch to Live Cloud (Render)</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="btn btn-outline btn-sm"
-                      onClick={() => {
-                        setBackendTarget('local');
-                        window.location.reload();
-                      }}
-                    >
-                      <Server size={14} />
-                      <span>Switch to Local Backend (Port 5000)</span>
-                    </button>
                   </div>
                 </div>
               </>

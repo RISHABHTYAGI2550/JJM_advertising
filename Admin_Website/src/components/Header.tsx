@@ -1,6 +1,5 @@
 import React from 'react';
-import { Plus, Megaphone, Menu, Server } from 'lucide-react';
-import { getActiveBackendUrl, setBackendTarget } from '../services/api';
+import { Plus, Megaphone, Menu } from 'lucide-react';
 
 interface HeaderProps {
   title: string;
@@ -22,9 +21,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenGlobalAdModal,
   onToggleMobileMenu,
 }) => {
-  const activeUrl = getActiveBackendUrl();
-  const isLocal = activeUrl.includes('localhost') || activeUrl.includes('127.0.0.1');
-
   return (
     <header
       style={{
@@ -125,27 +121,6 @@ export const Header: React.FC<HeaderProps> = ({
             {onlineScreensCount} / {totalScreensCount} TVs Online
           </span>
         </div>
-
-        {/* Backend Target Switcher */}
-        <button
-          onClick={() => setBackendTarget(isLocal ? 'live' : 'local')}
-          className="btn-outline btn-sm desktop-only"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '11px',
-            fontWeight: 600,
-            color: isLocal ? '#96600E' : '#0B7A58',
-            backgroundColor: isLocal ? 'var(--warning-subtle)' : 'var(--success-subtle)',
-            borderColor: isLocal ? '#FADCA3' : '#BCEFDE',
-            cursor: 'pointer',
-          }}
-          title={`Click to switch between Cloud and Local server (Current: ${activeUrl})`}
-        >
-          <Server size={13} />
-          <span>{isLocal ? 'Local: 5000' : 'Cloud Server'}</span>
-        </button>
 
         {/* Broadcast to All TVs Quick CTA */}
         <button
