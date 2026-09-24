@@ -15,6 +15,9 @@ import {
   Sliders,
   CheckCircle2,
   Calendar,
+  Layers,
+  Film,
+  AlertCircle,
 } from 'lucide-react';
 import { Campaign, MediaItem, Department, Screen, Playlist } from '../types';
 import { api, getBackendBaseUrl } from '../services/api';
@@ -45,7 +48,9 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   // Form states
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [contentTypeMode, setContentTypeMode] = useState<'media' | 'playlist'>('media');
   const [selectedMediaId, setSelectedMediaId] = useState(media[0]?.id || '');
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState(playlists[0]?.id || '');
   const [targetScope, setTargetScope] = useState<'all' | 'department' | 'screen'>('all');
   const [targetId, setTargetId] = useState('');
   const [priority, setPriority] = useState(70);
@@ -66,7 +71,9 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   const openCreateModal = () => {
     setName('');
     setDescription('');
+    setContentTypeMode(media.length > 0 ? 'media' : playlists.length > 0 ? 'playlist' : 'media');
     setSelectedMediaId(media[0]?.id || '');
+    setSelectedPlaylistId(playlists[0]?.id || '');
     setTargetScope('all');
     setTargetId('');
     setPriority(70);
@@ -79,7 +86,13 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
     setEditingCampaign(c);
     setName(c.name);
     setDescription(c.description || '');
-    setSelectedMediaId(c.mediaId || media[0]?.id || '');
+    if (c.playlistId) {
+      setContentTypeMode('playlist');
+      setSelectedPlaylistId(c.playlistId);
+    } else {
+      setContentTypeMode('media');
+      setSelectedMediaId(c.mediaId || media[0]?.id || '');
+    }
     setTargetScope(c.type === 'global' ? 'all' : c.type === 'screen' ? 'screen' : 'department');
     setTargetId(c.targetIds && c.targetIds[0] !== 'all' ? c.targetIds[0] : '');
     setPriority(c.priority || 70);
@@ -91,6 +104,18 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
     e.preventDefault();
     setIsSubmitting(true);
     try {
+      const isPlaylistMode = contentTypeMode === 'playlist';
+      if (isPlaylistMode && !selectedPlaylistId) {
+        alert('Please select a playlist');
+        setIsSubmitting(false);
+        return;
+      }
+      if (!isPlaylistMode && !selectedMediaId && media.length === 0) {
+        alert('Please upload a media asset in Media Assets tab first or select a Playlist');
+        setIsSubmitting(false);
+        return;
+      }
+
       const selectedMedia = media.find((m) => m.id === selectedMediaId);
       const targetIds = targetScope === 'all' ? ['all'] : targetId ? [targetId] : [];
 
@@ -99,8 +124,10 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
           name,
           description,
           type: targetScope === 'all' ? 'global' : targetScope,
-          mediaId: selectedMedia?.id,
-          mediaUrl: selectedMedia?.url,
+          contentType: isPlaylistMode ? 'playlist' : (selectedMedia?.type || 'image'),
+          mediaId: isPlaylistMode ? null : (selectedMedia?.id || null),
+          mediaUrl: isPlaylistMode ? null : (selectedMedia?.url || null),
+          playlistId: isPlaylistMode ? selectedPlaylistId : null,
           targetIds,
           priority: Number(priority),
           displayDurationSeconds: Number(duration),
@@ -112,9 +139,10 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
           name,
           description,
           type: targetScope === 'all' ? 'global' : targetScope,
-          contentType: selectedMedia?.type || 'image',
-          mediaId: selectedMedia?.id,
-          mediaUrl: selectedMedia?.url,
+          contentType: isPlaylistMode ? 'playlist' : (selectedMedia?.type || 'image'),
+          mediaId: isPlaylistMode ? undefined : selectedMedia?.id,
+          mediaUrl: isPlaylistMode ? undefined : selectedMedia?.url,
+          playlistId: isPlaylistMode ? selectedPlaylistId : undefined,
           targetIds,
           priority: Number(priority),
           displayDurationSeconds: Number(duration),
@@ -255,7 +283,8 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
           }}
         >
           {filteredCampaigns.map((camp) => {
-            const mediaItem = media.find((m) => m.id === camp.mediaId);
+            const mediaItem = camp.mediaId ? media.find((m) => m.id === camp.mediaId) : null;
+            const playlistItem = camp.playlistId ? playlists.find((p) => p.id === camp.playlistId) : null;
             const mediaThumb = mediaItem?.url
               ? mediaItem.url.startsWith('/')
                 ? `${getBackendBaseUrl()}${mediaItem.url}`
@@ -297,6 +326,13 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                           alt={camp.name}
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
+                      ) : playlistItem ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                          <Layers size={22} color="#EF5A7C" />
+                          <span style={{ fontSize: '9px', color: '#FFF', marginTop: '2px', fontWeight: 600 }}>
+                            {playlistItem.items?.length || 0} items
+                          </span>
+                        </div>
                       ) : (
                         <ImageIcon size={24} color="#554F63" />
                       )}
@@ -328,6 +364,9 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                       </div>
 
                       <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        {playlistItem ? (
+                          <span style={{ color: 'var(--primary)', fontWeight: 600 }}>Playlist: {playlistItem.name} • </span>
+                        ) : null}
                         Target: {camp.type === 'global' ? 'All TVs' : camp.type}
                       </div>
                     </div>
@@ -448,20 +487,103 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                   />
                 </div>
 
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Media Asset</label>
-                  <select
-                    className="form-select"
-                    value={selectedMediaId}
-                    onChange={(e) => setSelectedMediaId(e.target.value)}
-                    required
-                  >
-                    {media.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.title} ({m.type.toUpperCase()})
-                      </option>
-                    ))}
-                  </select>
+                {/* Content Source Selection: Media vs Playlist */}
+                <div>
+                  <label className="form-label">Campaign Content Source</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setContentTypeMode('media')}
+                      className={contentTypeMode === 'media' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm'}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                    >
+                      <ImageIcon size={14} />
+                      <span>Single Ad (Image/Video)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setContentTypeMode('playlist')}
+                      className={contentTypeMode === 'playlist' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm'}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                    >
+                      <Layers size={14} />
+                      <span>Display Playlist ({playlists.length})</span>
+                    </button>
+                  </div>
+
+                  {contentTypeMode === 'media' ? (
+                    media.length === 0 ? (
+                      <div
+                        style={{
+                          padding: '12px',
+                          borderRadius: 'var(--radius-sm)',
+                          backgroundColor: '#FEF3C7',
+                          border: '1px solid #FCD34D',
+                          color: '#92400E',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}
+                      >
+                        <AlertCircle size={16} />
+                        <span>
+                          No media assets found in library. Please upload a promotional banner or video in <strong>Media Assets</strong> tab, or switch to a <strong>Playlist</strong> above.
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <select
+                          className="form-select"
+                          value={selectedMediaId}
+                          onChange={(e) => setSelectedMediaId(e.target.value)}
+                          required
+                        >
+                          {media.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.title} [{m.type.toUpperCase()}] ({m.duration ? `${m.duration}s` : 'Ad'})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )
+                  ) : (
+                    playlists.length === 0 ? (
+                      <div
+                        style={{
+                          padding: '12px',
+                          borderRadius: 'var(--radius-sm)',
+                          backgroundColor: '#FEF3C7',
+                          border: '1px solid #FCD34D',
+                          color: '#92400E',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}
+                      >
+                        <AlertCircle size={16} />
+                        <span>
+                          No playlists created yet. Create a multi-ad sequence in the <strong>Playlists</strong> tab first, or choose <strong>Single Ad</strong> above.
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <select
+                          className="form-select"
+                          value={selectedPlaylistId}
+                          onChange={(e) => setSelectedPlaylistId(e.target.value)}
+                          required
+                        >
+                          {playlists.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.items?.length || 0} items)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )
+                  )}
                 </div>
 
                 <div>
