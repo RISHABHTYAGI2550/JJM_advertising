@@ -25,6 +25,12 @@ export function initDatabaseSchema() {
       updated_at TEXT NOT NULL
     );
 
+    -- Admin Auth Sessions (survives restarts)
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      token TEXT PRIMARY KEY,
+      created_at INTEGER NOT NULL
+    );
+
     -- Departments
     CREATE TABLE IF NOT EXISTS departments (
       id TEXT PRIMARY KEY,

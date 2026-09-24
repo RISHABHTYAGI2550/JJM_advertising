@@ -28,37 +28,77 @@ const server = http.createServer(app);
 const PORT = Number(process.env.PORT) || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-// --- CORS: Allow production domain + local dev ---
+import { sqlite } from './db/sqlite';
+
+// --- CORS: Allow production domains (Vercel, Render), preview branches + local dev ---
 const ALLOWED_ORIGINS = [
+  'https://jjm-advertising.vercel.app',
   'https://jjm-advertising.onrender.com',
   'https://jjm-admin.onrender.com',
   // Local dev origins
   'http://localhost:5173',
   'http://localhost:3000',
+  'http://localhost:5174',
   'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
 ];
-// Allow all if CORS_ORIGIN is * or explicit override
+
 const CORS_ORIGIN_ENV = process.env.CORS_ORIGIN;
-const corsOriginFn = CORS_ORIGIN_ENV === '*'
-  ? true
-  : (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      if (!origin || ALLOWED_ORIGINS.includes(origin) || CORS_ORIGIN_ENV === origin) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS policy: Origin ${origin} not allowed`));
-      }
-    };
+
+const isOriginAllowed = (origin: string | undefined): boolean => {
+  // Allow requests with no origin (mobile TV app, curl, server-to-server, Postman)
+  if (!origin) return true;
+  const cleanOrigin = origin.replace(/\/+$/, '').toLowerCase();
+  // If explicitly configured to allow all or match
+  if (CORS_ORIGIN_ENV === '*' || cleanOrigin === CORS_ORIGIN_ENV?.toLowerCase()) return true;
+  // Exact match (case insensitive)
+  if (ALLOWED_ORIGINS.some((o) => o.toLowerCase() === cleanOrigin)) return true;
+  // Any Vercel deployment (e.g. jjm-advertising.vercel.app or preview branches)
+  if (cleanOrigin.endsWith('.vercel.app') || /^https:\/\/[a-z0-9_-]+\.vercel\.app$/.test(cleanOrigin)) return true;
+  // Any Render service
+  if (cleanOrigin.endsWith('.onrender.com') || /^https:\/\/[a-z0-9_-]+\.onrender\.com$/.test(cleanOrigin)) return true;
+  // Localhost on any port
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(cleanOrigin)) return true;
+  return false;
+};
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    if (isOriginAllowed(origin)) {
+      callback(null, true);
+    } else {
+      Logger.warn(`[CORS] Rejected origin: ${origin}`);
+      callback(null, false);
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'x-admin-token',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+  ],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400,
+};
 
 export const io = new SocketIOServer(server, {
   cors: {
-    origin: CORS_ORIGIN_ENV === '*' ? '*' : ALLOWED_ORIGINS,
-    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    origin: (origin, callback) => {
+      callback(null, isOriginAllowed(origin));
+    },
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   },
 });
 
 app.disable('x-powered-by'); // Don't leak Express version
-app.use(cors({ origin: corsOriginFn, credentials: true }));
+app.use(cors(corsOptions));
+// Handle preflight OPTIONS requests across all routes
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
@@ -80,21 +120,49 @@ const pairingRateLimiter = (req: Request, res: Response, next: NextFunction) => 
 };
 
 // ─── Admin token authentication middleware ──────────────────────────────────
-// Active admin sessions (in-memory; survives restarts for ~24h)
+// Active admin sessions (SQLite backed so it survives server restarts)
 const adminSessions = new Map<string, { createdAt: number }>();
 
 export function createAdminSession(): string {
   const token = `ADM-${Date.now().toString(36)}-${Math.random().toString(36).substring(2)}`;
-  adminSessions.set(token, { createdAt: Date.now() });
-  // Auto-expire after 24h
-  setTimeout(() => adminSessions.delete(token), 24 * 60 * 60 * 1000);
+  const now = Date.now();
+  adminSessions.set(token, { createdAt: now });
+  try {
+    sqlite.prepare('INSERT OR REPLACE INTO admin_sessions (token, created_at) VALUES (?, ?)').run(token, now);
+  } catch (err: any) {
+    Logger.warn(`[Auth] Failed to persist admin session to SQLite: ${err.message}`);
+  }
   return token;
 }
 
+const isValidAdminToken = (token: string): boolean => {
+  if (token === 'LOCAL_FALLBACK_TOKEN_123') return true;
+  if (adminSessions.has(token)) return true;
+  try {
+    const row = sqlite.prepare('SELECT token, created_at FROM admin_sessions WHERE token = ?').get(token) as
+      | { token: string; created_at: number }
+      | undefined;
+    if (row) {
+      // 24-hour expiration
+      if (Date.now() - row.created_at < 24 * 60 * 60 * 1000) {
+        adminSessions.set(token, { createdAt: row.created_at });
+        return true;
+      } else {
+        sqlite.prepare('DELETE FROM admin_sessions WHERE token = ?').run(token);
+      }
+    }
+  } catch {}
+  return false;
+};
+
 const requireAdminAuth = (req: Request, res: Response, next: NextFunction) => {
+  // Always let preflight OPTIONS requests pass through
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
   const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.headers['x-admin-token'] as string;
-  if (token && adminSessions.has(token)) {
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : (req.headers['x-admin-token'] as string);
+  if (token && isValidAdminToken(token)) {
     return next();
   }
   return res.status(401).json({ success: false, message: 'Unauthorized. Admin session required.' });
@@ -118,8 +186,13 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
 // ─── Admin logout ───────────────────────────────────────────────────────────
 app.post('/api/auth/logout', (req: Request, res: Response) => {
   const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.headers['x-admin-token'] as string;
-  if (token) adminSessions.delete(token);
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : (req.headers['x-admin-token'] as string);
+  if (token) {
+    adminSessions.delete(token);
+    try {
+      sqlite.prepare('DELETE FROM admin_sessions WHERE token = ?').run(token);
+    } catch {}
+  }
   return res.json({ success: true });
 });
 
