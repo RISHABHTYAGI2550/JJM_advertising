@@ -13,6 +13,7 @@ import '../../core/network/api_service.dart';
 import '../../core/storage/storage_service.dart';
 import '../../core/websocket/socket_service.dart';
 import '../../core/queue/queue_monitor.dart';
+import '../../core/config/app_config.dart';
 import '../../models/display_models.dart';
 import '../pairing/pairing_view.dart';
 
