@@ -20,19 +20,19 @@ router.post('/broadcast-global', (req: Request, res: Response) => {
 
   const isVideo = media?.type === 'video' || (finalMediaUrl && (finalMediaUrl.endsWith('.mp4') || finalMediaUrl.endsWith('.webm')));
   const campaign = campaignRepo.create({
-    name: campaignName,
+    name: campaignName as string,
     description: 'One-click global broadcast to all hospital TVs',
     type: 'global',
     contentType: isVideo ? 'single_video_only' : 'single_image_only',
     targetIds: ['all'],
-    mediaId,
-    mediaUrl: finalMediaUrl,
-    priority: priority ? parseInt(priority, 10) : 95,
+    mediaId: mediaId as string | undefined,
+    mediaUrl: finalMediaUrl as string | undefined,
+    priority: priority ? parseInt(priority as string, 10) : 95,
     intervalMinutes: 1,
-    displayDurationSeconds: duration ? parseInt(duration, 10) : (media?.duration || 15),
+    displayDurationSeconds: duration ? parseInt(duration as string, 10) : (media?.duration ?? 15),
     daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
     status: 'active',
-  });
+  } as any);
 
   screenRepo.incrementAllTargetConfigVersions();
 
@@ -100,16 +100,16 @@ router.post('/', (req: Request, res: Response) => {
     mediaId,
     mediaUrl,
     playlistId,
-    priority: priority ? parseInt(priority, 10) : 50,
-    intervalMinutes: intervalMinutes ? parseInt(intervalMinutes, 10) : 3,
-    displayDurationSeconds: displayDurationSeconds ? parseInt(displayDurationSeconds, 10) : 15,
+    priority: priority ? parseInt(priority as string, 10) : 50,
+    intervalMinutes: intervalMinutes ? parseInt(intervalMinutes as string, 10) : 3,
+    displayDurationSeconds: displayDurationSeconds ? parseInt(displayDurationSeconds as string, 10) : 15,
     daysOfWeek: Array.isArray(daysOfWeek) ? daysOfWeek : [0, 1, 2, 3, 4, 5, 6],
     startDate,
     endDate,
     startTime,
     endTime,
     status: 'active',
-  });
+  } as any);
 
   // Increment targetConfigVersion for targeted screens
   if (campaign.targetIds.includes('all') || campaign.type === 'global') {
