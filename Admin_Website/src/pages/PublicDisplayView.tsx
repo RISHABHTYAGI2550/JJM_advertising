@@ -269,6 +269,7 @@ export const PublicDisplayView: React.FC<PublicDisplayViewProps> = ({ screenId }
         >
           {currentAd.type === 'video' ? (
             <video
+              key={resolvedMediaUrl}
               src={resolvedMediaUrl}
               autoPlay
               muted
@@ -278,6 +279,7 @@ export const PublicDisplayView: React.FC<PublicDisplayViewProps> = ({ screenId }
             />
           ) : (
             <img
+              key={resolvedMediaUrl}
               src={resolvedMediaUrl}
               alt={currentAd.title || 'Hospital Advertisement'}
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}

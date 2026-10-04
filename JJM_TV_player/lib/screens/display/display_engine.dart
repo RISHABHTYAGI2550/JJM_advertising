@@ -494,6 +494,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
 
   void _playVideo(String rawUrl) {
     _videoController?.dispose();
+    _videoController = null;
     final url = _resolveMediaUrl(rawUrl);
     if (url.isEmpty) {
       _nextPlaylistItem();
@@ -502,18 +503,20 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
 
     try {
       final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      _videoController = controller; // Assign immediately to track active controller
+      
       controller.initialize().then((_) {
-        if (mounted && _currentState == DisplayState.AD_PLAYBACK) {
+        if (mounted && _videoController == controller && _currentState == DisplayState.AD_PLAYBACK) {
           controller.setLooping(true); // Loop video so screen doesn't go black
-          setState(() {
-            _videoController = controller;
-          });
+          setState(() {});
           controller.play();
         } else {
-          controller.dispose(); // Mounted check failed, discard
+          controller.dispose(); // Discard if no longer the active controller
         }
       }).catchError((_) {
-        _nextPlaylistItem();
+        if (mounted && _videoController == controller) {
+          _nextPlaylistItem();
+        }
       });
     } catch (_) {
       _nextPlaylistItem();
