@@ -18,15 +18,16 @@ router.post('/broadcast-global', (req: Request, res: Response) => {
   const finalMediaUrl = mediaUrl || media?.url;
   const campaignName = name || `Global Broadcast - ${new Date().toLocaleTimeString()}`;
 
+  const isVideo = media?.type === 'video' || (finalMediaUrl && (finalMediaUrl.endsWith('.mp4') || finalMediaUrl.endsWith('.webm')));
   const campaign = campaignRepo.create({
     name: campaignName,
     description: 'One-click global broadcast to all hospital TVs',
     type: 'global',
-    contentType: media?.type || 'image',
+    contentType: isVideo ? 'single_video_only' : 'single_image_only',
     targetIds: ['all'],
     mediaId,
     mediaUrl: finalMediaUrl,
-    priority: priority ? parseInt(priority, 10) : 90,
+    priority: priority ? parseInt(priority, 10) : 95,
     intervalMinutes: 1,
     displayDurationSeconds: duration ? parseInt(duration, 10) : (media?.duration || 15),
     daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
@@ -111,7 +112,7 @@ router.post('/', (req: Request, res: Response) => {
   });
 
   // Increment targetConfigVersion for targeted screens
-  if (campaign.targetIds.includes('all')) {
+  if (campaign.targetIds.includes('all') || campaign.type === 'global') {
     screenRepo.incrementAllTargetConfigVersions();
   } else {
     for (const t of campaign.targetIds) {
@@ -119,6 +120,8 @@ router.post('/', (req: Request, res: Response) => {
         screenRepo.incrementDepartmentTargetConfigVersions(t);
       } else if (t.startsWith('SCR-')) {
         screenRepo.incrementTargetConfigVersion(t);
+      } else {
+        screenRepo.incrementAllTargetConfigVersions();
       }
     }
   }

@@ -108,21 +108,43 @@ export const PublicDisplayView: React.FC<PublicDisplayViewProps> = ({ screenId }
   useEffect(() => {
     if (!config || activeEmergency) return;
 
-    const ads = config.playlist?.items?.filter((it: any) => it.type === 'image' || it.type === 'video') || [];
+    const playlistItems: any[] = Array.isArray(config.playlist)
+      ? config.playlist
+      : config.playlist?.items || [];
+    const ads = playlistItems.filter((it: any) => it.type === 'image' || it.type === 'video');
+    const hasQueue = playlistItems.some((it: any) => it.type === 'queue');
 
+    // 1. If no ads exist, always stay in queue mode
     if (ads.length === 0) {
       setCurrentMode('queue');
       return;
     }
 
+    // 2. If NO queue exists in playlist (continuous fullscreen ad mode)
+    if (!hasQueue) {
+      setCurrentMode('ad');
+      if (ads.length > 1) {
+        const currentAd = ads[currentAdIndex % ads.length];
+        const adDuration = (currentAd?.duration || currentAd?.durationSeconds || 15) * 1000;
+        cycleTimerRef.current = setTimeout(() => {
+          setCurrentAdIndex((prev) => (prev + 1) % ads.length);
+        }, adDuration);
+      }
+      return () => {
+        if (cycleTimerRef.current) clearTimeout(cycleTimerRef.current);
+      };
+    }
+
+    // 3. Alternating Mode (Doctor OPD Queue <-> Advertisements)
     if (currentMode === 'queue') {
-      const queueDuration = (config.settings?.queueDurationSeconds || 20) * 1000;
+      const queueItem = playlistItems.find((it: any) => it.type === 'queue');
+      const queueDuration = (queueItem?.duration || config.settings?.queueDurationSeconds || 20) * 1000;
       cycleTimerRef.current = setTimeout(() => {
         setCurrentMode('ad');
       }, queueDuration);
     } else {
       const currentAd = ads[currentAdIndex % ads.length];
-      const adDuration = (currentAd?.durationSeconds || 10) * 1000;
+      const adDuration = (currentAd?.duration || currentAd?.durationSeconds || 15) * 1000;
       cycleTimerRef.current = setTimeout(() => {
         setCurrentAdIndex((prev) => (prev + 1) % ads.length);
         setCurrentMode('queue');
@@ -197,8 +219,16 @@ export const PublicDisplayView: React.FC<PublicDisplayViewProps> = ({ screenId }
     );
   }
 
-  const ads = config.playlist?.items?.filter((it: any) => it.type === 'image' || it.type === 'video') || [];
+  const playlistItems: any[] = Array.isArray(config.playlist)
+    ? config.playlist
+    : config.playlist?.items || [];
+  const ads = playlistItems.filter((it: any) => it.type === 'image' || it.type === 'video');
   const currentAd = ads.length > 0 ? ads[currentAdIndex % ads.length] : null;
+
+  const rawMediaUrl = currentAd?.mediaUrl || currentAd?.url || '';
+  const resolvedMediaUrl = rawMediaUrl.startsWith('/')
+    ? `${getBackendBaseUrl()}${rawMediaUrl}`
+    : rawMediaUrl;
 
   return (
     <div
@@ -226,7 +256,7 @@ export const PublicDisplayView: React.FC<PublicDisplayViewProps> = ({ screenId }
       />
 
       {/* LAYER 2: Advertisement / Campaign Overlay */}
-      {currentMode === 'ad' && currentAd && !activeEmergency && (
+      {currentMode === 'ad' && currentAd && resolvedMediaUrl && !activeEmergency && (
         <div
           style={{
             width: '100%',
@@ -239,7 +269,7 @@ export const PublicDisplayView: React.FC<PublicDisplayViewProps> = ({ screenId }
         >
           {currentAd.type === 'video' ? (
             <video
-              src={currentAd.url.startsWith('/') ? `${getBackendBaseUrl()}${currentAd.url}` : currentAd.url}
+              src={resolvedMediaUrl}
               autoPlay
               muted
               loop
@@ -248,8 +278,8 @@ export const PublicDisplayView: React.FC<PublicDisplayViewProps> = ({ screenId }
             />
           ) : (
             <img
-              src={currentAd.url.startsWith('/') ? `${getBackendBaseUrl()}${currentAd.url}` : currentAd.url}
-              alt="Hospital Advertisement"
+              src={resolvedMediaUrl}
+              alt={currentAd.title || 'Hospital Advertisement'}
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
           )}

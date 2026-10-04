@@ -21,9 +21,12 @@ export class CampaignRepository {
     const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     for (const c of campaigns) {
-      // 1. Day of week filter
-      if (c.daysOfWeek && c.daysOfWeek.length > 0 && !c.daysOfWeek.includes(currentDay)) {
-        continue;
+      // 1. Day of week filter (normalize 0 and 7 for Sunday)
+      if (c.daysOfWeek && c.daysOfWeek.length > 0) {
+        const normalizedDays = c.daysOfWeek.map((d: number) => (d === 7 ? 0 : d));
+        if (!normalizedDays.includes(currentDay)) {
+          continue;
+        }
       }
       // 2. Time range filter
       if (c.startTime && c.endTime) {
@@ -42,9 +45,11 @@ export class CampaignRepository {
 
       if (c.type === 'global' || targets.some(t => t.targetType === 'ALL' || t.targetId === 'all')) {
         isTargeted = true;
-      } else if (targets.some(t => t.targetType === 'DEPARTMENT' && t.targetId === departmentId)) {
+      } else if (targets.some(t => (t.targetType === 'DEPARTMENT' || t.targetId.startsWith('DEP-')) && t.targetId === departmentId)) {
         isTargeted = true;
-      } else if (targets.some(t => t.targetType === 'SCREEN' && t.targetId === screenId)) {
+      } else if (targets.some(t => (t.targetType === 'SCREEN' || t.targetId.startsWith('SCR-')) && t.targetId === screenId)) {
+        isTargeted = true;
+      } else if (c.targetIds && (c.targetIds.includes('all') || c.targetIds.includes(screenId) || c.targetIds.includes(departmentId))) {
         isTargeted = true;
       }
 
@@ -64,6 +69,19 @@ export class CampaignRepository {
       targetType: r.target_type as 'ALL' | 'DEPARTMENT' | 'SCREEN',
       targetId: r.target_id,
     }));
+  }
+
+  private resolveTargetType(targetId: string): 'ALL' | 'DEPARTMENT' | 'SCREEN' {
+    if (!targetId || targetId === 'all') return 'ALL';
+    if (targetId.startsWith('DEP-')) return 'DEPARTMENT';
+    if (targetId.startsWith('SCR-')) return 'SCREEN';
+    try {
+      const dept = sqlite.prepare('SELECT id FROM departments WHERE id = ?').get(targetId);
+      if (dept) return 'DEPARTMENT';
+      const screen = sqlite.prepare('SELECT id FROM screens WHERE id = ?').get(targetId);
+      if (screen) return 'SCREEN';
+    } catch (_) {}
+    return 'ALL';
   }
 
   public create(campaign: Omit<Campaign, 'id' | 'createdAt'> & { id?: string }): Campaign {
@@ -105,10 +123,7 @@ export class CampaignRepository {
       // Save target relationships
       const targetIds = campaign.targetIds || ['all'];
       for (const targetId of targetIds) {
-        let targetType: 'ALL' | 'DEPARTMENT' | 'SCREEN' = 'ALL';
-        if (targetId.startsWith('DEP-')) targetType = 'DEPARTMENT';
-        else if (targetId.startsWith('SCR-')) targetType = 'SCREEN';
-
+        const targetType = this.resolveTargetType(targetId);
         sqlite.prepare(`
           INSERT INTO campaign_targets (id, campaign_id, target_type, target_id)
           VALUES (?, ?, ?, ?)
@@ -157,10 +172,7 @@ export class CampaignRepository {
       if (updates.targetIds) {
         sqlite.prepare('DELETE FROM campaign_targets WHERE campaign_id = ?').run(id);
         for (const targetId of updates.targetIds) {
-          let targetType: 'ALL' | 'DEPARTMENT' | 'SCREEN' = 'ALL';
-          if (targetId.startsWith('DEP-')) targetType = 'DEPARTMENT';
-          else if (targetId.startsWith('SCR-')) targetType = 'SCREEN';
-
+          const targetType = this.resolveTargetType(targetId);
           sqlite.prepare(`
             INSERT INTO campaign_targets (id, campaign_id, target_type, target_id)
             VALUES (?, ?, ?, ?)

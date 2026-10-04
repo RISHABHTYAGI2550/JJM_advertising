@@ -49,7 +49,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
   DisplayState _currentState = DisplayState.BOOT;
   ResolvedConfig? _config;
   int _currentIndex = 0;
-  String _serverBaseUrl = '';
+  String _serverBaseUrl = AppConfig.defaultBackendUrl;
   String? _loadedQueueUrl;
   bool _isCampaignPaused = false;
 
@@ -186,6 +186,9 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
   void _applyResolvedConfig(ResolvedConfig newConfig) {
     final queueUrlChanged = _loadedQueueUrl != newConfig.queueUrl;
     _config = newConfig;
+    if (_currentIndex >= newConfig.playlist.length) {
+      _currentIndex = 0;
+    }
     _isCampaignPaused = newConfig.settings['isPaused'] == true;
     _queueMonitor.updateThreshold(newConfig.staleThresholdSeconds);
 
@@ -453,6 +456,10 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
       return;
     }
 
+    if (_currentIndex >= _config!.playlist.length) {
+      _currentIndex = 0;
+    }
+
     final currentItem = _config!.playlist[_currentIndex];
     final durationSeconds = currentItem.duration > 0 ? currentItem.duration : 15;
 
@@ -516,11 +523,12 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
   String _resolveMediaUrl(String? rawUrl) {
     if (rawUrl == null || rawUrl.isEmpty) return '';
     String url = rawUrl.trim();
+    final base = (_serverBaseUrl.isNotEmpty ? _serverBaseUrl : AppConfig.defaultBackendUrl).replaceAll(RegExp(r'/+$'), '');
     if (url.startsWith('/')) {
-      if (_serverBaseUrl.isNotEmpty) url = '$_serverBaseUrl$url';
+      url = '$base$url';
     }
-    if (!kIsWeb && _serverBaseUrl.isNotEmpty && url.contains('localhost')) {
-      final serverUri = Uri.tryParse(_serverBaseUrl);
+    if (!kIsWeb && base.isNotEmpty && url.contains('localhost')) {
+      final serverUri = Uri.tryParse(base);
       if (serverUri != null && serverUri.host.isNotEmpty && serverUri.host != 'localhost') {
         url = url.replaceAll('localhost', serverUri.host);
       }
@@ -613,18 +621,49 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (item?.type == 'video' && _videoController != null && _videoController!.value.isInitialized)
-            Center(
-              child: AspectRatio(
-                aspectRatio: _videoController!.value.aspectRatio,
-                child: VideoPlayer(_videoController!),
-              ),
-            )
+          if (item?.type == 'video')
+            (_videoController != null && _videoController!.value.isInitialized)
+                ? Center(
+                    child: AspectRatio(
+                      aspectRatio: _videoController!.value.aspectRatio,
+                      child: VideoPlayer(_videoController!),
+                    ),
+                  )
+                : const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF6B3A8A)),
+                  )
           else if (item?.type == 'image' && url.isNotEmpty)
             CachedNetworkImage(
               imageUrl: url,
-              fit: BoxFit.cover,
-              errorWidget: (_, __, ___) => _buildQueuePlaceholder(),
+              fit: BoxFit.contain,
+              placeholder: (_, __) => const Center(
+                child: CircularProgressIndicator(color: Color(0xFF6B3A8A)),
+              ),
+              errorWidget: (_, err, ___) => Container(
+                color: const Color(0xFF0B1329),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.broken_image, size: 64, color: Colors.white38),
+                      const SizedBox(height: 12),
+                      Text(
+                        item?.title ?? 'Advertisement',
+                        style: const TextStyle(fontSize: 20, color: Colors.white),
+                      ),
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Text(
+                          url,
+                          style: const TextStyle(fontSize: 12, color: Colors.white38),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             )
           else
             _buildQueuePlaceholder(),

@@ -73,23 +73,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
           duration: Number(broadcastDuration),
         });
       } else {
+        const isVideo = selectedMedia.type === 'video';
+        const targetId = selectedTargetId || (broadcastTarget === 'department' ? departments[0]?.id : screens[0]?.id);
         await api.post('/campaigns', {
           name: broadcastTitle,
-          type: selectedMedia.type,
-          contentType: selectedMedia.type,
+          type: broadcastTarget,
+          contentType: isVideo ? 'single_video_only' : 'single_image_only',
           mediaId: selectedMedia.id,
           mediaUrl: selectedMedia.url,
-          priority: 80,
-          intervalMinutes: 5,
+          priority: 85,
+          intervalMinutes: 1,
           displayDurationSeconds: Number(broadcastDuration),
-          daysOfWeek: [1, 2, 3, 4, 5, 6, 7],
+          daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
           status: 'active',
-          targets: [
-            {
-              targetType: broadcastTarget === 'department' ? 'DEPARTMENT' : 'SCREEN',
-              targetId: selectedTargetId || (broadcastTarget === 'department' ? departments[0]?.id : screens[0]?.id),
-            },
-          ],
+          targetIds: [targetId],
         });
       }
 

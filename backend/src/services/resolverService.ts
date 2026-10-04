@@ -121,8 +121,8 @@ export class ResolverService {
   ): ResolvedDisplayConfig {
     let items: PlaylistItem[] = [];
 
-    // 1. Explicit playlist campaign
-    if (campaign.playlistId) {
+    // 1. Explicit playlist campaign (only if contentType is playlist or no media is specified)
+    if (campaign.playlistId && (campaign.contentType === 'playlist' || (!campaign.mediaId && !campaign.mediaUrl))) {
       const pl = playlistRepo.getById(campaign.playlistId);
       if (pl && pl.items.length) {
         items = pl.items;
@@ -134,7 +134,7 @@ export class ResolverService {
       items = [{ id: 'camp-q-only', type: 'queue', title: 'Doctor Live Token Queue', duration: 30, order: 1 }];
     }
 
-    // 3. Media-based campaign (Image / Video / Banner)
+    // 3. Media-based campaign (Single Image / Video / Banner)
     if (!items.length && (campaign.mediaId || campaign.mediaUrl)) {
       const media = campaign.mediaId ? mediaRepo.getById(campaign.mediaId) : undefined;
       const mediaUrl = campaign.mediaUrl || media?.url || '';
@@ -157,16 +157,21 @@ export class ResolverService {
 
       const queueDuration =
         campaign.intervalMinutes && campaign.intervalMinutes > 0
-          ? Math.max(15, campaign.intervalMinutes * 60)
-          : 30;
+          ? Math.max(10, campaign.intervalMinutes * 60)
+          : 20;
 
-      if (campaign.contentType === 'single_image_only' || campaign.contentType === 'single_video_only') {
-        // Fullscreen ad only (no queue)
+      const isFullscreenOnly =
+        campaign.contentType === 'single_image_only' ||
+        campaign.contentType === 'single_video_only' ||
+        campaign.contentType === 'fullscreen_only';
+
+      if (isFullscreenOnly) {
+        // Fullscreen ad only (Continuous single image or video playback — no queue)
         items = [
           {
             id: `camp-ad-${campaign.id}`,
             type: itemType,
-            mediaId: campaign.mediaId,
+            mediaId: campaign.mediaId || media?.id,
             mediaUrl,
             title: campaign.name,
             duration: adDuration,
@@ -174,22 +179,23 @@ export class ResolverService {
           },
         ];
       } else {
-        // Alternating Doctor OPD Queue and Campaign Ad
+        // Alternating Single Ad and Doctor OPD Queue
+        // CRITICAL: Put the Ad as ORDER 1 so it plays IMMEDIATELY when the campaign is activated!
         items = [
+          {
+            id: `camp-ad-${campaign.id}`,
+            type: itemType,
+            mediaId: campaign.mediaId || media?.id,
+            mediaUrl,
+            title: campaign.name,
+            duration: adDuration,
+            order: 1,
+          },
           {
             id: `camp-q-${campaign.id}`,
             type: 'queue',
             title: 'Doctor Live Token Queue',
             duration: queueDuration,
-            order: 1,
-          },
-          {
-            id: `camp-ad-${campaign.id}`,
-            type: itemType,
-            mediaId: campaign.mediaId,
-            mediaUrl,
-            title: campaign.name,
-            duration: adDuration,
             order: 2,
           },
         ];

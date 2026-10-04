@@ -49,6 +49,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [contentTypeMode, setContentTypeMode] = useState<'media' | 'playlist'>('media');
+  const [singleMediaMode, setSingleMediaMode] = useState<'fullscreen' | 'alternating'>('fullscreen');
   const [selectedMediaId, setSelectedMediaId] = useState(media[0]?.id || '');
   const [selectedPlaylistId, setSelectedPlaylistId] = useState(playlists[0]?.id || '');
   const [targetScope, setTargetScope] = useState<'all' | 'department' | 'screen'>('all');
@@ -56,7 +57,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   const [priority, setPriority] = useState(70);
   const [duration, setDuration] = useState(15);
   const [intervalMinutes, setIntervalMinutes] = useState(5);
-  const [daysOfWeek, setDaysOfWeek] = useState<number[]>([1, 2, 3, 4, 5, 6, 7]);
+  const [daysOfWeek, setDaysOfWeek] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Filtering campaigns by tab
@@ -72,6 +73,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
     setName('');
     setDescription('');
     setContentTypeMode(media.length > 0 ? 'media' : playlists.length > 0 ? 'playlist' : 'media');
+    setSingleMediaMode('fullscreen');
     setSelectedMediaId(media[0]?.id || '');
     setSelectedPlaylistId(playlists[0]?.id || '');
     setTargetScope('all');
@@ -79,6 +81,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
     setPriority(70);
     setDuration(15);
     setIntervalMinutes(5);
+    setDaysOfWeek([0, 1, 2, 3, 4, 5, 6]);
     setShowCreateModal(true);
   };
 
@@ -86,18 +89,24 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
     setEditingCampaign(c);
     setName(c.name);
     setDescription(c.description || '');
-    if (c.playlistId) {
+    if (c.playlistId && c.contentType === 'playlist') {
       setContentTypeMode('playlist');
       setSelectedPlaylistId(c.playlistId);
     } else {
       setContentTypeMode('media');
       setSelectedMediaId(c.mediaId || media[0]?.id || '');
+      setSingleMediaMode(
+        c.contentType === 'single_image_only' || c.contentType === 'single_video_only'
+          ? 'fullscreen'
+          : 'alternating'
+      );
     }
     setTargetScope(c.type === 'global' ? 'all' : c.type === 'screen' ? 'screen' : 'department');
     setTargetId(c.targetIds && c.targetIds[0] !== 'all' ? c.targetIds[0] : '');
     setPriority(c.priority || 70);
     setDuration(c.displayDurationSeconds || 15);
     setIntervalMinutes(c.intervalMinutes || 5);
+    setDaysOfWeek(c.daysOfWeek?.length ? c.daysOfWeek : [0, 1, 2, 3, 4, 5, 6]);
   };
 
   const handleSaveCampaign = async (e: React.FormEvent) => {
@@ -116,15 +125,25 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
         return;
       }
 
-      const selectedMedia = media.find((m) => m.id === selectedMediaId);
+      const selectedMedia = media.find((m) => m.id === selectedMediaId) || media[0];
       const targetIds = targetScope === 'all' ? ['all'] : targetId ? [targetId] : [];
+      const isVideo = selectedMedia?.type === 'video';
+
+      let resolvedContentType = 'single_image_only';
+      if (isPlaylistMode) {
+        resolvedContentType = 'playlist';
+      } else if (singleMediaMode === 'fullscreen') {
+        resolvedContentType = isVideo ? 'single_video_only' : 'single_image_only';
+      } else {
+        resolvedContentType = isVideo ? 'single_video' : 'single_image';
+      }
 
       if (editingCampaign) {
         await api.patch(`/campaigns/${editingCampaign.id}`, {
           name,
           description,
           type: targetScope === 'all' ? 'global' : targetScope,
-          contentType: isPlaylistMode ? 'playlist' : (selectedMedia?.type || 'image'),
+          contentType: resolvedContentType,
           mediaId: isPlaylistMode ? null : (selectedMedia?.id || null),
           mediaUrl: isPlaylistMode ? null : (selectedMedia?.url || null),
           playlistId: isPlaylistMode ? selectedPlaylistId : null,
@@ -132,6 +151,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
           priority: Number(priority),
           displayDurationSeconds: Number(duration),
           intervalMinutes: Number(intervalMinutes),
+          daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
         });
         setEditingCampaign(null);
       } else {
@@ -139,7 +159,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
           name,
           description,
           type: targetScope === 'all' ? 'global' : targetScope,
-          contentType: isPlaylistMode ? 'playlist' : (selectedMedia?.type || 'image'),
+          contentType: resolvedContentType,
           mediaId: isPlaylistMode ? undefined : selectedMedia?.id,
           mediaUrl: isPlaylistMode ? undefined : selectedMedia?.url,
           playlistId: isPlaylistMode ? selectedPlaylistId : undefined,
@@ -147,7 +167,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
           priority: Number(priority),
           displayDurationSeconds: Number(duration),
           intervalMinutes: Number(intervalMinutes),
-          daysOfWeek,
+          daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
           status: 'active',
         });
         setShowCreateModal(false);
@@ -285,10 +305,11 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
           {filteredCampaigns.map((camp) => {
             const mediaItem = camp.mediaId ? media.find((m) => m.id === camp.mediaId) : null;
             const playlistItem = camp.playlistId ? playlists.find((p) => p.id === camp.playlistId) : null;
-            const mediaThumb = mediaItem?.url
-              ? mediaItem.url.startsWith('/')
-                ? `${getBackendBaseUrl()}${mediaItem.url}`
-                : mediaItem.url
+            const rawUrl = camp.mediaUrl || mediaItem?.url;
+            const mediaThumb = rawUrl
+              ? rawUrl.startsWith('/')
+                ? `${getBackendBaseUrl()}${rawUrl}`
+                : rawUrl
               : null;
             const isActive = camp.status === 'active';
 
@@ -532,20 +553,104 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                         </span>
                       </div>
                     ) : (
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <select
-                          className="form-select"
-                          value={selectedMediaId}
-                          onChange={(e) => setSelectedMediaId(e.target.value)}
-                          required
-                        >
-                          {media.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.title} [{m.type.toUpperCase()}] ({m.duration ? `${m.duration}s` : 'Ad'})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <select
+                            className="form-select"
+                            value={selectedMediaId}
+                            onChange={(e) => setSelectedMediaId(e.target.value)}
+                            required
+                          >
+                            {media.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.title} [{m.type.toUpperCase()}] ({m.duration ? `${m.duration}s` : 'Ad'})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Selected Media Preview Card */}
+                        {(() => {
+                          const activeMedia = media.find((m) => m.id === selectedMediaId) || media[0];
+                          if (!activeMedia) return null;
+                          const mediaUrl = activeMedia.url.startsWith('/')
+                            ? `${getBackendBaseUrl()}${activeMedia.url}`
+                            : activeMedia.url;
+                          return (
+                            <div
+                              style={{
+                                marginTop: '8px',
+                                padding: '10px 12px',
+                                backgroundColor: 'var(--bg-main)',
+                                borderRadius: 'var(--radius-sm)',
+                                border: '1px solid var(--border)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: '56px',
+                                  height: '42px',
+                                  borderRadius: '4px',
+                                  backgroundColor: '#000000',
+                                  overflow: 'hidden',
+                                  flexShrink: 0,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                {activeMedia.type === 'video' ? (
+                                  <Film size={22} color="#EF5A7C" />
+                                ) : (
+                                  <img
+                                    src={mediaUrl}
+                                    alt={activeMedia.title}
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                  />
+                                )}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--dark)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {activeMedia.title}
+                                </div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                                  {activeMedia.type.toUpperCase()} • Duration: {activeMedia.duration || 15}s
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Single Media Playback Mode Selector */}
+                        <div style={{ marginTop: '10px' }}>
+                          <label className="form-label" style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            Display Playback Mode
+                          </label>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setSingleMediaMode('fullscreen')}
+                              className={singleMediaMode === 'fullscreen' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm'}
+                              style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}
+                            >
+                              <span style={{ fontWeight: 700, fontSize: '12px' }}>Continuous Fullscreen</span>
+                              <span style={{ fontSize: '10px', opacity: 0.85 }}>100% Poster/Video Only (No Queue)</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSingleMediaMode('alternating')}
+                              className={singleMediaMode === 'alternating' ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm'}
+                              style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}
+                            >
+                              <span style={{ fontWeight: 700, fontSize: '12px' }}>Alternate with Queue</span>
+                              <span style={{ fontSize: '10px', opacity: 0.85 }}>Ad First ➔ Doctor Queue</span>
+                            </button>
+                          </div>
+                        </div>
+                      </>
                     )
                   ) : (
                     playlists.length === 0 ? (
