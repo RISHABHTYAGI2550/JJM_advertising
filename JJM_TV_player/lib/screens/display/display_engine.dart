@@ -53,6 +53,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
   String _serverBaseUrl = AppConfig.defaultBackendUrl;
   String? _loadedQueueUrl;
   bool _isCampaignPaused = false;
+  bool _isPowerOff = false;
 
   // Controllers & Monitors
   WebViewController? _webViewController;
@@ -73,6 +74,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
     super.initState();
     _config = widget.initialConfig;
     _isCampaignPaused = _config?.settings['isPaused'] == true;
+    _isPowerOff = _config?.settings['powerState'] == 'off';
 
     _pulseController = AnimationController(
       vsync: this,
@@ -191,6 +193,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
       _currentIndex = 0;
     }
     _isCampaignPaused = newConfig.settings['isPaused'] == true;
+    _isPowerOff = newConfig.settings['powerState'] == 'off';
     _queueMonitor.updateThreshold(newConfig.staleThresholdSeconds);
 
     SocketService.updateDiagnostics(
@@ -452,6 +455,12 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
     _itemTimer?.cancel();
     if (_currentState == DisplayState.EMERGENCY) return;
 
+    if (_isPowerOff) {
+      _transitionTo(DisplayState.QUEUE);
+      _videoController?.pause();
+      return;
+    }
+
     if (_config == null || _config!.playlist.isEmpty || _isCampaignPaused) {
       _transitionTo(DisplayState.QUEUE);
       return;
@@ -589,6 +598,10 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
             // LAYER 4: State Diagnostics Pill (Only in Degraded / Recovering state)
             if (_currentState == DisplayState.RECOVERING || _currentState == DisplayState.DEGRADED)
               _buildStatusPill(),
+              
+            // LAYER 5: TV POWER OFF BLACK SCREEN
+            if (_isPowerOff)
+              Container(color: Colors.black),
           ],
         ),
       ),
