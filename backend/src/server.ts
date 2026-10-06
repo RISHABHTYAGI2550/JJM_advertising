@@ -289,6 +289,7 @@ io.on('connection', (socket) => {
     mediaManifestVersion,
     queueConnected,
     queueLastUpdateAt,
+    isForeground,
     deviceMetadata,
   }) => {
     if (screenId) {
@@ -300,13 +301,21 @@ io.on('connection', (socket) => {
           mediaManifestVersion,
         });
 
+        const mergedMetadata = {
+          ...(typeof screen.deviceMetadata === 'string'
+            ? JSON.parse(screen.deviceMetadata || '{}')
+            : screen.deviceMetadata || {}),
+          ...(deviceMetadata || {}),
+          isForeground: isForeground !== undefined ? isForeground : true,
+        };
+
         screenRepo.recordHeartbeat(screenId, {
           appliedConfigVersion: appliedConfigVersion !== undefined ? Number(appliedConfigVersion) : undefined,
           mediaManifestVersion: mediaManifestVersion !== undefined ? Number(mediaManifestVersion) : undefined,
           currentContent: currentContent || 'queue',
           playerVersion: playerVersion || '1.0.0',
           healthStatus,
-          deviceMetadata,
+          deviceMetadata: mergedMetadata,
         });
 
         io.emit('screen:heartbeat_received', {
@@ -316,6 +325,7 @@ io.on('connection', (socket) => {
           appliedConfigVersion,
           targetConfigVersion: screen.targetConfigVersion,
           currentContent,
+          isForeground: isForeground !== undefined ? isForeground : true,
         });
       } else {
         Logger.warn(`[Socket.IO] Orphan TV sent heartbeat: ${screenId}. Forcing unpair.`);

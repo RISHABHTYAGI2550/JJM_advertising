@@ -13,6 +13,7 @@ class SocketService {
   static int _appliedConfigVersion = 0;
   static int _mediaManifestVersion = 1;
   static bool _queueConnected = true;
+  static bool _isForeground = true;
   static DateTime _queueLastUpdateAt = DateTime.now();
 
   static Function(ResolvedConfig)? onConfigUpdate;
@@ -206,12 +207,14 @@ class SocketService {
     int? manifestVersion,
     bool? queueConnected,
     DateTime? queueLastUpdate,
+    bool? isForeground,
   }) {
     if (content != null) _currentContent = content;
     if (appliedVersion != null) _appliedConfigVersion = appliedVersion;
     if (manifestVersion != null) _mediaManifestVersion = manifestVersion;
     if (queueConnected != null) _queueConnected = queueConnected;
     if (queueLastUpdate != null) _queueLastUpdateAt = queueLastUpdate;
+    if (isForeground != null) _isForeground = isForeground;
   }
 
   static void _startHeartbeat() {
@@ -225,6 +228,7 @@ class SocketService {
           'appliedConfigVersion': _appliedConfigVersion,
           'mediaManifestVersion': _mediaManifestVersion,
           'queueConnected': _queueConnected,
+          'isForeground': _isForeground,
           'queueLastUpdateAt': _queueLastUpdateAt.toIso8601String(),
         });
       }

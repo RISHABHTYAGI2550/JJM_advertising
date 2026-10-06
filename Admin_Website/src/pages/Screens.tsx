@@ -442,10 +442,35 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
                       </div>
                     </div>
 
-                    <span className={`badge ${isOnline ? 'badge-online' : 'badge-offline'}`}>
-                      <span className={`status-dot ${isOnline ? 'online' : 'offline'}`} />
-                      {isOnline ? 'Online' : 'Offline'}
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                      <span className={`badge ${isOnline ? 'badge-online' : 'badge-offline'}`}>
+                        <span className={`status-dot ${isOnline ? 'online' : 'offline'}`} />
+                        {isOnline ? 'Online' : 'Offline'}
+                      </span>
+                      {isOnline && (
+                        <span
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: (() => {
+                              const meta = typeof screen.deviceMetadata === 'string' ? JSON.parse(screen.deviceMetadata || '{}') : screen.deviceMetadata || {};
+                              return meta.isForeground === false ? '#FEF3C7' : '#E0E7FF';
+                            })(),
+                            color: (() => {
+                              const meta = typeof screen.deviceMetadata === 'string' ? JSON.parse(screen.deviceMetadata || '{}') : screen.deviceMetadata || {};
+                              return meta.isForeground === false ? '#92400E' : '#3730A3';
+                            })(),
+                          }}
+                        >
+                          {(() => {
+                            const meta = typeof screen.deviceMetadata === 'string' ? JSON.parse(screen.deviceMetadata || '{}') : screen.deviceMetadata || {};
+                            return meta.isForeground === false ? 'App in Background' : 'App is Open';
+                          })()}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Metadata info */}

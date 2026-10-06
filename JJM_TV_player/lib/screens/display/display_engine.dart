@@ -47,7 +47,7 @@ class DisplayEngine extends StatefulWidget {
   State<DisplayEngine> createState() => _DisplayEngineState();
 }
 
-class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProviderStateMixin {
+class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   DisplayState _currentState = DisplayState.BOOT;
   ResolvedConfig? _config;
   int _currentIndex = 0;
@@ -73,6 +73,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _config = widget.initialConfig;
     _isCampaignPaused = _config?.settings['isPaused'] == true;
     _isPowerOff = _config?.settings['powerState'] == 'off';
@@ -102,6 +103,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _itemTimer?.cancel();
     _snapshotTimer?.cancel();
     _emergencyAutoDismissTimer?.cancel();
@@ -110,6 +112,12 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
     _queueMonitor.dispose();
     SocketService.disconnect();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    bool isForeground = state == AppLifecycleState.resumed;
+    SocketService.updateDiagnostics(isForeground: isForeground);
   }
 
   void _transitionTo(DisplayState newState) {
