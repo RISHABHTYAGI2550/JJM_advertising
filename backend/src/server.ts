@@ -262,6 +262,7 @@ io.on('connection', (socket) => {
 
       const room = `screen:${screenId}`;
       socket.join(room);
+      socket.data.screenId = screenId;
       Logger.info(`[Socket.IO] Screen joined room: ${room}`, { screenId, appVersion, configVersion });
 
       const now = new Date().toISOString();
@@ -379,6 +380,15 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     Logger.info(`[Socket.IO] Client disconnected: ${socket.id}`);
+    const screenId = socket.data.screenId;
+    if (screenId) {
+      screenRepo.update(screenId, {
+        connectionStatus: 'offline',
+        healthStatus: 'OFFLINE',
+      });
+      io.emit('screen:status_change', { screenId, status: 'offline', healthStatus: 'OFFLINE' });
+      io.emit('screens:changed');
+    }
   });
 });
 

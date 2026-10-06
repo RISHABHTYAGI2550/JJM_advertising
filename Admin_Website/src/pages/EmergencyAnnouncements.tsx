@@ -11,7 +11,7 @@ import {
   Volume2,
   Languages,
 } from 'lucide-react';
-import { EmergencyAnnouncement, Screen } from '../types';
+import { EmergencyAnnouncement, Screen, Department } from '../types';
 import { api } from '../services/api';
 
 interface EmergencyAnnouncementsProps {
@@ -28,8 +28,9 @@ export const EmergencyAnnouncements: React.FC<EmergencyAnnouncementsProps> = ({
   const [duration, setDuration] = useState<number>(30); // in seconds, 0 = manual
   const [language, setLanguage] = useState<'en' | 'hi' | 'both'>('both');
   const [targetType, setTargetType] = useState<'ALL' | 'DEPARTMENT' | 'SCREEN'>('ALL');
-  const [selectedTargetId, setSelectedTargetId] = useState<string>('all');
+  const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
   const [priority, setPriority] = useState<'critical' | 'high' | 'normal'>('critical');
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   const [heading, setHeading] = useState('CODE RED: MEDICAL EMERGENCY / आपातकालीन सूचना');
   const [message, setMessage] = useState(
@@ -52,8 +53,18 @@ export const EmergencyAnnouncements: React.FC<EmergencyAnnouncementsProps> = ({
     } catch (_) {}
   };
 
+  const fetchDepartments = async () => {
+    try {
+      const res = await api.get('/departments');
+      if (res.data.success) {
+        setDepartments(res.data.departments);
+      }
+    } catch (_) {}
+  };
+
   useEffect(() => {
     fetchActive();
+    fetchDepartments();
   }, []);
 
   // Countdown timer for active announcement
@@ -93,7 +104,7 @@ export const EmergencyAnnouncements: React.FC<EmergencyAnnouncementsProps> = ({
         highlightScreen: true,
         durationSeconds: duration > 0 ? duration : null,
         targetType,
-        targetIds: [selectedTargetId],
+        targetIds: targetType === 'ALL' ? ['all'] : selectedTargetIds,
       });
 
       if (res.data.success) {
@@ -270,7 +281,7 @@ export const EmergencyAnnouncements: React.FC<EmergencyAnnouncementsProps> = ({
                     type="button"
                     onClick={() => {
                       setTargetType(t);
-                      setSelectedTargetId(t === 'ALL' ? 'all' : screens[0]?.id || 'all');
+                      setSelectedTargetIds([]);
                     }}
                     className={targetType === t ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm'}
                   >
@@ -280,14 +291,42 @@ export const EmergencyAnnouncements: React.FC<EmergencyAnnouncementsProps> = ({
               </div>
             </div>
 
+            {targetType === 'DEPARTMENT' && (
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Select Departments (Hold Ctrl/Cmd to select multiple)</label>
+                <select
+                  multiple
+                  className="form-select"
+                  value={selectedTargetIds}
+                  onChange={(e) => {
+                    const options = Array.from(e.target.selectedOptions, option => option.value);
+                    setSelectedTargetIds(options);
+                  }}
+                  required
+                  style={{ minHeight: '120px' }}
+                >
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {targetType === 'SCREEN' && (
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Select Screen</label>
+                <label className="form-label">Select Screens (Hold Ctrl/Cmd to select multiple)</label>
                 <select
+                  multiple
                   className="form-select"
-                  value={selectedTargetId}
-                  onChange={(e) => setSelectedTargetId(e.target.value)}
+                  value={selectedTargetIds}
+                  onChange={(e) => {
+                    const options = Array.from(e.target.selectedOptions, option => option.value);
+                    setSelectedTargetIds(options);
+                  }}
                   required
+                  style={{ minHeight: '120px' }}
                 >
                   {screens.map((s) => (
                     <option key={s.id} value={s.id}>
