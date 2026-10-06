@@ -181,6 +181,20 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
     }
   };
 
+  const handleCloseApp = async (screen: Screen, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Are you sure you want to FORCE CLOSE the TV app on "${screen.name}"?`)) return;
+    try {
+      await api.post(`/screens/${screen.id}/command`, {
+        commandType: 'CLOSE_APP',
+      });
+      alert('Close App command dispatched to TV.');
+      onRefreshScreens();
+    } catch (err: any) {
+      alert(`Failed to close app: ${err.message}`);
+    }
+  };
+
   const handleUnpairScreen = async (screen: Screen, e: React.MouseEvent) => {
     e.stopPropagation();
     if (
@@ -195,6 +209,23 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
       onRefreshScreens();
     } catch (err: any) {
       alert(`Failed to unpair: ${err.message}`);
+    }
+  };
+
+  const handleDeleteScreen = async (screen: Screen, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (
+      !confirm(
+        `Are you sure you want to DELETE "${screen.name}" entirely from the database?\n\nThis will also unpair the TV and wipe its cache permanently.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await api.delete(`/screens/${screen.id}`);
+      onRefreshScreens();
+    } catch (err: any) {
+      alert(`Failed to delete: ${err.message}`);
     }
   };
 
@@ -523,6 +554,24 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
                     >
                       <Radio size={13} />
                     </button>
+
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={(e) => handleCloseApp(screen, e)}
+                      title="Force Close TV App"
+                      style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}
+                    >
+                      <X size={13} />
+                    </button>
+
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={(e) => handleDeleteScreen(screen, e)}
+                      title="Delete TV from System"
+                      style={{ color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.3)' }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
 
                   <button
@@ -616,6 +665,14 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
                         >
                           <Sliders size={13} />
                           <span>Control</span>
+                        </button>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={(e) => handleDeleteScreen(screen, e)}
+                          title="Delete TV from System"
+                          style={{ color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.3)' }}
+                        >
+                          <Trash2 size={13} />
                         </button>
                       </div>
                     </td>

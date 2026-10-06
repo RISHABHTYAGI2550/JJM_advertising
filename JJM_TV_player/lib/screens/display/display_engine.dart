@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -354,6 +355,15 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
             'durationMs': stopwatch.elapsedMilliseconds,
             'restarted': true,
           });
+          break;
+
+        case 'CLOSE_APP':
+          SocketService.sendCommandApplied(commandId);
+          SocketService.sendCommandAck(commandId, {
+            'durationMs': stopwatch.elapsedMilliseconds,
+            'closed': true,
+          });
+          SystemNavigator.pop();
           break;
 
         case 'CLEAR_CACHE':
