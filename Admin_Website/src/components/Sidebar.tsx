@@ -113,18 +113,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div
               style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: 'var(--primary)',
+                width: '38px',
+                height: '38px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#FFFFFF',
                 flexShrink: 0,
               }}
             >
-              <Activity size={20} strokeWidth={2.2} />
+              <img src="/logo.png" alt="JJM Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             </div>
             <div>
               <div

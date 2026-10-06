@@ -190,7 +190,7 @@ class _PairingViewState extends State<PairingView> {
                             )
                           ],
                         ),
-                        child: const Icon(Icons.local_hospital_rounded, color: Colors.white, size: 36),
+                        child: Image.asset('assets/images/logo.png', width: 44, height: 44, fit: BoxFit.contain),
                       ),
                       const SizedBox(width: 16),
                       Flexible(
