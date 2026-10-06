@@ -21,6 +21,11 @@ void main() async {
     await WakelockPlus.enable();
   } catch (_) {}
 
+  // Request Android SYSTEM_ALERT_WINDOW (Overlay) permission for background wake-ups
+  try {
+    const MethodChannel('com.jjm.tv/kiosk').invokeMethod('requestOverlayPermission');
+  } catch (_) {}
+
   // Check existing pairing credentials
   final credentials = await StorageService.getCredentials();
   ResolvedConfig? cachedConfig;

@@ -552,7 +552,7 @@ export const EmergencyAnnouncements: React.FC<EmergencyAnnouncementsProps> = ({
                   color: '#A8A2B5',
                 }}
               >
-                <span>Target: {targetType === 'ALL' ? 'All Hospital Displays' : selectedTargetId}</span>
+                <span>Target: {targetType === 'ALL' ? 'All Hospital Displays' : selectedTargetIds.join(', ')}</span>
                 <span>Auto-Revert: {duration === 0 ? 'Manual Clear' : `${duration}s`}</span>
               </div>
             </div>
