@@ -127,18 +127,15 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         <div style={{ textAlign: 'center', marginBottom: '28px' }}>
           <div
             style={{
-              width: '52px',
-              height: '52px',
-              borderRadius: '12px',
-              backgroundColor: 'var(--primary)',
+              width: '64px',
+              height: '64px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               margin: '0 auto 14px',
-              color: '#FFFFFF',
             }}
           >
-            <Activity size={28} strokeWidth={2.4} />
+            <img src="/logo.png" alt="JJM Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--dark)' }}>
             JJM Hospital Kashipur
