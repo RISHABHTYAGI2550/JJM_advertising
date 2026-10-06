@@ -293,47 +293,95 @@ export const EmergencyAnnouncements: React.FC<EmergencyAnnouncementsProps> = ({
 
             {targetType === 'DEPARTMENT' && (
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Select Departments (Hold Ctrl/Cmd to select multiple)</label>
-                <select
-                  multiple
-                  className="form-select"
-                  value={selectedTargetIds}
-                  onChange={(e) => {
-                    const options = Array.from(e.target.selectedOptions, option => option.value);
-                    setSelectedTargetIds(options);
-                  }}
-                  required
-                  style={{ minHeight: '120px' }}
-                >
+                <label className="form-label">Select Departments</label>
+                <div style={{ 
+                  border: '1px solid var(--border)', 
+                  borderRadius: 'var(--radius-md)', 
+                  padding: '4px', 
+                  maxHeight: '160px', 
+                  overflowY: 'auto', 
+                  backgroundColor: 'var(--bg-subtle)' 
+                }}>
+                  {departments.length === 0 && (
+                    <div style={{ padding: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>No departments available</div>
+                  )}
                   {departments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
+                    <label 
+                      key={d.id} 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '10px', 
+                        padding: '8px', 
+                        cursor: 'pointer', 
+                        borderBottom: '1px solid var(--border)',
+                        backgroundColor: selectedTargetIds.includes(d.id) ? 'rgba(99,102,241,0.05)' : 'transparent'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedTargetIds.includes(d.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedTargetIds([...selectedTargetIds, d.id]);
+                          } else {
+                            setSelectedTargetIds(selectedTargetIds.filter(id => id !== d.id));
+                          }
+                        }}
+                        style={{ width: '16px', height: '16px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: '14px', color: 'var(--dark)', fontWeight: 500 }}>{d.name}</span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
             )}
 
             {targetType === 'SCREEN' && (
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Select Screens (Hold Ctrl/Cmd to select multiple)</label>
-                <select
-                  multiple
-                  className="form-select"
-                  value={selectedTargetIds}
-                  onChange={(e) => {
-                    const options = Array.from(e.target.selectedOptions, option => option.value);
-                    setSelectedTargetIds(options);
-                  }}
-                  required
-                  style={{ minHeight: '120px' }}
-                >
+                <label className="form-label">Select Screens</label>
+                <div style={{ 
+                  border: '1px solid var(--border)', 
+                  borderRadius: 'var(--radius-md)', 
+                  padding: '4px', 
+                  maxHeight: '160px', 
+                  overflowY: 'auto', 
+                  backgroundColor: 'var(--bg-subtle)' 
+                }}>
+                  {screens.length === 0 && (
+                    <div style={{ padding: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>No screens available</div>
+                  )}
                   {screens.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.location})
-                    </option>
+                    <label 
+                      key={s.id} 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '10px', 
+                        padding: '8px', 
+                        cursor: 'pointer', 
+                        borderBottom: '1px solid var(--border)',
+                        backgroundColor: selectedTargetIds.includes(s.id) ? 'rgba(99,102,241,0.05)' : 'transparent'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedTargetIds.includes(s.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedTargetIds([...selectedTargetIds, s.id]);
+                          } else {
+                            setSelectedTargetIds(selectedTargetIds.filter(id => id !== s.id));
+                          }
+                        }}
+                        style={{ width: '16px', height: '16px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: '14px', color: 'var(--dark)', fontWeight: 500 }}>
+                        {s.name} <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>({s.location})</span>
+                      </span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
             )}
 
