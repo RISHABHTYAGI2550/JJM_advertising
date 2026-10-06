@@ -47,7 +47,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Broadcast state
   const [broadcastTarget, setBroadcastTarget] = useState<'all' | 'department' | 'screen'>('all');
-  const [selectedTargetId, setSelectedTargetId] = useState<string>('');
+  const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
   const [broadcastTitle, setBroadcastTitle] = useState('Hospital General Awareness Broadcast');
   const [broadcastMediaId, setBroadcastMediaId] = useState(media[0]?.id || '');
   const [broadcastDuration, setBroadcastDuration] = useState(30);
@@ -74,7 +74,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
         });
       } else {
         const isVideo = selectedMedia.type === 'video';
-        const targetId = selectedTargetId || (broadcastTarget === 'department' ? departments[0]?.id : screens[0]?.id);
+        const finalTargetIds = selectedTargetIds.length > 0 ? selectedTargetIds : [(broadcastTarget === 'department' ? departments[0]?.id : screens[0]?.id)];
+        
         await api.post('/campaigns', {
           name: broadcastTitle,
           type: broadcastTarget,
@@ -86,7 +87,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           displayDurationSeconds: Number(broadcastDuration),
           daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
           status: 'active',
-          targetIds: [targetId],
+          targetIds: finalTargetIds,
         });
       }
 
@@ -297,39 +298,97 @@ export const Dashboard: React.FC<DashboardProps> = ({
             {/* Target Dropdown if department or screen selected */}
             {broadcastTarget === 'department' && (
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Select Department</label>
-                <select
-                  className="form-select"
-                  value={selectedTargetId}
-                  onChange={(e) => setSelectedTargetId(e.target.value)}
-                  required
-                >
-                  <option value="">-- Choose Department --</option>
+                <label className="form-label">Select Departments</label>
+                <div style={{ 
+                  border: '1px solid var(--border)', 
+                  borderRadius: 'var(--radius-md)', 
+                  padding: '4px', 
+                  maxHeight: '160px', 
+                  overflowY: 'auto', 
+                  backgroundColor: 'var(--bg-subtle)' 
+                }}>
+                  {departments.length === 0 && (
+                    <div style={{ padding: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>No departments available</div>
+                  )}
                   {departments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name} ({d.code})
-                    </option>
+                    <label 
+                      key={d.id} 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '10px', 
+                        padding: '8px', 
+                        cursor: 'pointer', 
+                        borderBottom: '1px solid var(--border)',
+                        backgroundColor: selectedTargetIds.includes(d.id) ? 'rgba(99,102,241,0.05)' : 'transparent'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedTargetIds.includes(d.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedTargetIds([...selectedTargetIds, d.id]);
+                          } else {
+                            setSelectedTargetIds(selectedTargetIds.filter(id => id !== d.id));
+                          }
+                        }}
+                        style={{ width: '16px', height: '16px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: '14px', color: 'var(--dark)', fontWeight: 500 }}>
+                        {d.name} <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>({d.code})</span>
+                      </span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
             )}
 
             {broadcastTarget === 'screen' && (
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Select Screen</label>
-                <select
-                  className="form-select"
-                  value={selectedTargetId}
-                  onChange={(e) => setSelectedTargetId(e.target.value)}
-                  required
-                >
-                  <option value="">-- Choose Screen --</option>
+                <label className="form-label">Select Screens</label>
+                <div style={{ 
+                  border: '1px solid var(--border)', 
+                  borderRadius: 'var(--radius-md)', 
+                  padding: '4px', 
+                  maxHeight: '160px', 
+                  overflowY: 'auto', 
+                  backgroundColor: 'var(--bg-subtle)' 
+                }}>
+                  {screens.length === 0 && (
+                    <div style={{ padding: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>No screens available</div>
+                  )}
                   {screens.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.location})
-                    </option>
+                    <label 
+                      key={s.id} 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '10px', 
+                        padding: '8px', 
+                        cursor: 'pointer', 
+                        borderBottom: '1px solid var(--border)',
+                        backgroundColor: selectedTargetIds.includes(s.id) ? 'rgba(99,102,241,0.05)' : 'transparent'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedTargetIds.includes(s.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedTargetIds([...selectedTargetIds, s.id]);
+                          } else {
+                            setSelectedTargetIds(selectedTargetIds.filter(id => id !== s.id));
+                          }
+                        }}
+                        style={{ width: '16px', height: '16px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: '14px', color: 'var(--dark)', fontWeight: 500 }}>
+                        {s.name} <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>({s.location})</span>
+                      </span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
             )}
 
