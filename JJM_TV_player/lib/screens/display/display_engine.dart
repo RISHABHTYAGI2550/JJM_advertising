@@ -379,7 +379,16 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
             'durationMs': stopwatch.elapsedMilliseconds,
             'closed': true,
           });
-          SystemNavigator.pop();
+          const MethodChannel('com.jjm.tv/kiosk').invokeMethod('minimizeApp');
+          break;
+
+        case 'OPEN_APP':
+          const MethodChannel('com.jjm.tv/kiosk').invokeMethod('bringToFront');
+          SocketService.sendCommandApplied(commandId);
+          SocketService.sendCommandAck(commandId, {
+            'durationMs': stopwatch.elapsedMilliseconds,
+            'opened': true,
+          });
           break;
 
         case 'CLEAR_CACHE':

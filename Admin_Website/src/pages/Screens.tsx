@@ -16,6 +16,7 @@ import {
   Edit2,
   X,
   Radio,
+  Maximize,
   CheckCircle2,
   AlertTriangle,
   RefreshCw,
@@ -183,15 +184,28 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
 
   const handleCloseApp = async (screen: Screen, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm(`Are you sure you want to FORCE CLOSE the TV app on "${screen.name}"?`)) return;
+    if (!confirm(`Are you sure you want to MINIMIZE the TV app on "${screen.name}"?`)) return;
     try {
       await api.post(`/screens/${screen.id}/command`, {
         commandType: 'CLOSE_APP',
       });
-      alert('Close App command dispatched to TV.');
+      alert('App minimized to background.');
       onRefreshScreens();
     } catch (err: any) {
       alert(`Failed to close app: ${err.message}`);
+    }
+  };
+
+  const handleOpenApp = async (screen: Screen, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await api.post(`/screens/${screen.id}/command`, {
+        commandType: 'OPEN_APP',
+      });
+      alert('Open App command dispatched.');
+      onRefreshScreens();
+    } catch (err: any) {
+      alert(`Failed to open app: ${err.message}`);
     }
   };
 
@@ -585,10 +599,19 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
                     <button
                       className="btn btn-outline btn-sm"
                       onClick={(e) => handleCloseApp(screen, e)}
-                      title="Force Close TV App"
+                      title="Minimize TV App"
                       style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}
                     >
                       <X size={13} />
+                    </button>
+
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={(e) => handleOpenApp(screen, e)}
+                      title="Bring App to Foreground"
+                      style={{ color: 'var(--primary)', borderColor: 'var(--primary)' }}
+                    >
+                      <Maximize size={13} />
                     </button>
 
                     <button
