@@ -626,7 +626,6 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
               Container(color: Colors.black),
           ],
         ),
-      ),
     );
   }
 
