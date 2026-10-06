@@ -241,6 +241,14 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
               },
             ),
           )
+          ..addJavaScriptChannel(
+            'QueueChannel',
+            onMessageReceived: (JavaScriptMessage message) {
+              if (message.message == 'mutated') {
+                _queueMonitor.notifyQueueUpdated();
+              }
+            },
+          )
           ..loadRequest(Uri.parse(url));
 
         setState(() {
@@ -256,7 +264,9 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
       const js = '''
         (function() {
           const observer = new MutationObserver(function() {
-            window.lastMutation = Date.now();
+            if (window.QueueChannel) {
+              window.QueueChannel.postMessage('mutated');
+            }
           });
           observer.observe(document.body, { childList: true, subtree: true, characterData: true });
         })();
@@ -314,11 +324,9 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
       }
     };
 
-    // Periodic CCTV snapshot (every 30s)
+    // Periodic CCTV snapshot removed due to Android TV buffer overflow (ImageReader_JNI)
     _snapshotTimer?.cancel();
-    _snapshotTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      _captureAndSendSnapshot();
-    });
+    _snapshotTimer = null;
   }
 
   // ==========================================
@@ -568,18 +576,8 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
   }
 
   Future<void> _captureAndSendSnapshot() async {
-    try {
-      final boundary = _previewContainerKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary != null) {
-        final image = await boundary.toImage(pixelRatio: 0.5);
-        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-        if (byteData != null) {
-          final bytes = byteData.buffer.asUint8List();
-          final base64String = 'data:image/png;base64,${base64Encode(bytes)}';
-          SocketService.sendSnapshot(base64String);
-        }
-      }
-    } catch (_) {}
+    // Disabled intentionally to prevent ImageReader_JNI buffer exhaustion on TV
+    SocketService.sendSnapshot('');
   }
 
   @override
@@ -594,9 +592,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B1329),
-      body: RepaintBoundary(
-        key: _previewContainerKey,
-        child: Stack(
+      body: Stack(
           fit: StackFit.expand,
           children: [
             // LAYER 1: Doctor OPD Live Queue (WebView)
@@ -617,7 +613,6 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
             if (_currentState == DisplayState.RECOVERING || _currentState == DisplayState.DEGRADED)
               _buildStatusPill(),
               
-            // LAYER 5: TV POWER OFF BLACK SCREEN
             if (_isPowerOff)
               Container(color: Colors.black),
           ],

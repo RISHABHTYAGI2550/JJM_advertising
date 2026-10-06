@@ -153,7 +153,7 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
     if (!confirm(`Send restart command to "${screen.name}"?`)) return;
     try {
       await api.post(`/screens/${screen.id}/command`, {
-        commandType: 'REBOOT_DEVICE',
+        commandType: 'RESTART_PLAYER',
         payload: { force: true },
       });
       alert('Restart command dispatched to TV.');

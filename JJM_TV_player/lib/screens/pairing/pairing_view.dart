@@ -193,28 +193,32 @@ class _PairingViewState extends State<PairingView> {
                         child: const Icon(Icons.local_hospital_rounded, color: Colors.white, size: 36),
                       ),
                       const SizedBox(width: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text(
-                            "JJM HOSPITAL KASHIPUR",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 26,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.5,
+                      Flexible(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              "JJM HOSPITAL KASHIPUR",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.5,
+                              ),
+                              softWrap: true,
                             ),
-                          ),
-                          Text(
-                            "DIGITAL SIGNAGE & QUEUE DISPLAY PLAYER",
-                            style: TextStyle(
-                              color: _lightPurple,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 1.2,
+                            Text(
+                              "DIGITAL SIGNAGE & QUEUE DISPLAY PLAYER",
+                              style: TextStyle(
+                                color: _lightPurple,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 1.2,
+                              ),
+                              softWrap: true,
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
                   ),
