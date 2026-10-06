@@ -253,6 +253,13 @@ io.on('connection', (socket) => {
   // TV client registers itself
   socket.on('screen:register', ({ screenId, deviceToken, appVersion, configVersion }) => {
     if (screenId) {
+      const screen = screenRepo.getById(screenId);
+      if (!screen) {
+        Logger.warn(`[Socket.IO] Orphan TV attempted to register: ${screenId}. Forcing unpair.`);
+        socket.emit('screen:unpaired', { screenId });
+        return;
+      }
+
       const room = `screen:${screenId}`;
       socket.join(room);
       Logger.info(`[Socket.IO] Screen joined room: ${room}`, { screenId, appVersion, configVersion });
@@ -310,6 +317,9 @@ io.on('connection', (socket) => {
           targetConfigVersion: screen.targetConfigVersion,
           currentContent,
         });
+      } else {
+        Logger.warn(`[Socket.IO] Orphan TV sent heartbeat: ${screenId}. Forcing unpair.`);
+        socket.emit('screen:unpaired', { screenId });
       }
     }
   });
