@@ -157,7 +157,7 @@ export class ResolverService {
 
       const queueDuration =
         campaign.intervalMinutes && campaign.intervalMinutes > 0
-          ? Math.max(10, campaign.intervalMinutes * 60)
+          ? Math.max(5, campaign.intervalMinutes)
           : 20;
 
       const isFullscreenOnly =

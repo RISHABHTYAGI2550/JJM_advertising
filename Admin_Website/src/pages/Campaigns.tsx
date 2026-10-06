@@ -416,7 +416,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                     <div>
                       <span style={{ color: 'var(--text-muted)' }}>Frequency:</span>
                       <div style={{ fontWeight: 600, color: 'var(--text-main)', marginTop: '1px' }}>
-                        Every {camp.intervalMinutes || 5} min
+                        Every {camp.intervalMinutes || 5} sec
                       </div>
                     </div>
                   </div>
@@ -763,13 +763,13 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                   </div>
 
                   <div>
-                    <label className="form-label">Interval (minutes)</label>
+                    <label className="form-label">Interval (seconds)</label>
                     <input
                       type="number"
                       className="form-input"
                       value={intervalMinutes}
                       onChange={(e) => setIntervalMinutes(Number(e.target.value))}
-                      min={1}
+                      min={5}
                       max={60}
                       required
                     />
