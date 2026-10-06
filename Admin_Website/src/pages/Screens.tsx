@@ -526,9 +526,11 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
                     justifyContent: 'space-between',
                     paddingTop: '12px',
                     borderTop: '1px solid var(--border)',
+                    flexWrap: 'wrap',
+                    gap: '10px'
                   }}
                 >
-                  <div style={{ display: 'flex', gap: '6px' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     <button
                       className="btn btn-outline btn-sm"
                       onClick={(e) => handleOpenEdit(screen, e)}
