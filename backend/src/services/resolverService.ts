@@ -104,17 +104,61 @@ export class ResolverService {
     const eligibleCampaigns = campaignRepo.getActiveForScreen(screen.id, screen.departmentId);
 
     if (eligibleCampaigns.length > 0) {
-      const winningCampaign = eligibleCampaigns[0];
-      return this.buildConfigFromCampaign(
-        screen,
+      // Combine all eligible campaigns into a single looping playlist
+      let combinedItems: PlaylistItem[] = [];
+      const primaryCampaign = eligibleCampaigns[0];
+
+      for (const campaign of eligibleCampaigns) {
+        const tempConfig = this.buildConfigFromCampaign(
+          screen,
+          departmentName,
+          queueUrl,
+          staleThresholdSeconds,
+          configVersion,
+          mediaManifestVersion,
+          campaign,
+          activeEmergency
+        );
+        combinedItems = combinedItems.concat(tempConfig.playlist);
+      }
+
+      // Re-index order
+      combinedItems.forEach((item, index) => {
+        item.order = index + 1;
+        // Make IDs unique if there are multiple queue items
+        if (item.type === 'queue') {
+          item.id = `${item.id}-${index}`;
+        }
+      });
+
+      return {
+        screenId: screen.id,
+        screenName: screen.name,
+        departmentId: screen.departmentId,
         departmentName,
         queueUrl,
         staleThresholdSeconds,
         configVersion,
         mediaManifestVersion,
-        winningCampaign,
-        activeEmergency
-      );
+        activeCampaign: {
+          id: primaryCampaign.id, // Report the highest priority one as active for UI purposes
+          name: eligibleCampaigns.length > 1 ? `${primaryCampaign.name} (+${eligibleCampaigns.length - 1} more)` : primaryCampaign.name,
+          type: 'multiple',
+          priority: primaryCampaign.priority,
+          contentType: 'mixed',
+        },
+        playlist: combinedItems,
+        settings: {
+          transition: 'fade',
+          heartbeatSeconds: 20,
+          offlineMediaCached: true,
+          isPaused: !!screen.isPaused,
+          powerState: screen.powerState || 'on',
+          rotation: screen.rotation || 0,
+          emergencyAnnouncement: activeEmergency,
+          announcementTicker: undefined,
+        },
+      };
     }
 
     // Default Playlist resolution
