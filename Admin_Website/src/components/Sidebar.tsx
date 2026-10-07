@@ -40,6 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'floor-overview', label: 'Floor Overview', icon: Layers },
     {
       id: 'emergency',
       label: 'Emergency Alerts',

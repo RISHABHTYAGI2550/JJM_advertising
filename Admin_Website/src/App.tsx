@@ -12,6 +12,7 @@ import { LiveFeeds } from './pages/LiveFeeds';
 import { EmergencyAnnouncements } from './pages/EmergencyAnnouncements';
 import { DeploymentReconciliation } from './pages/DeploymentReconciliation';
 import { SettingsPage } from './pages/Settings';
+import { FloorOverview } from './pages/FloorOverview';
 import { Login } from './pages/Login';
 import { PublicDisplayView } from './pages/PublicDisplayView';
 import { PairScreenModal } from './components/PairScreenModal';
@@ -176,6 +177,8 @@ export const App: React.FC = () => {
         return 'Hospital Overview & Operations';
       case 'emergency':
         return 'Emergency Broadcast Center';
+      case 'floor-overview':
+        return 'Floor & Layout Overview';
       case 'screens':
         return 'Screens / TVs Management';
       case 'live-feeds':
@@ -205,6 +208,8 @@ export const App: React.FC = () => {
         return 'Monitor, control and broadcast content across all connected hospital displays.';
       case 'emergency':
         return 'Instant alert takeover across all hospital screens and OPD consultation displays.';
+      case 'floor-overview':
+        return 'Matrix overview of TV allocations and network health grouped by building floors.';
       case 'screens':
         return 'Control and monitor connected hospital display units across all OPD wards.';
       case 'live-feeds':
@@ -288,6 +293,10 @@ export const App: React.FC = () => {
               onOpenGlobalModal={() => setIsGlobalModalOpen(true)}
               onSelectScreen={(s) => setSelectedScreen(s)}
             />
+          )}
+
+          {activeTab === 'floor-overview' && (
+            <FloorOverview screens={screens} departments={departments} />
           )}
 
           {activeTab === 'screens' && (
