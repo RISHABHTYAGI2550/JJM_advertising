@@ -247,6 +247,42 @@ export function initDatabaseSchema() {
       )
     `).run(new Date().toISOString());
   } catch (e: any) {}
+
+  // Seed default departments based on HMS data
+  try {
+    const depts = [
+      { code: 'DOC038', name: 'Pediatrics', description: 'Dr. Arun Pachauri', floor: '1st Floor, Block-A' },
+      { code: 'DOC041', name: 'Radiology & Imaging', description: 'Dr. Brij Mohan Goel', floor: 'Ground Floor, Block-A' },
+      { code: 'DOC040', name: 'Cardiology', description: 'Dr. Ashok Goel', floor: 'Unknown Floor' },
+      { code: 'DOC039', name: 'Anaesthesia and Critical Care', description: 'Dr. Yamini Goel', floor: 'Unknown Floor' },
+      { code: 'DOC00031', name: 'Nephrology', description: 'Dr Abhishek Goel', floor: 'Unknown Floor' },
+      { code: 'DOC043', name: 'Obstetrics & Gynecology', description: 'Dr. Ruchi Rastogi', floor: 'Unknown Floor' },
+      { code: 'DOC042', name: 'General Surgery', description: 'Dr. Pradeep Raj Rastogi', floor: 'Unknown Floor' },
+      { code: 'DOC035', name: 'Surgeon', description: 'Dr. Altaf Hussain Bhat', floor: 'Unknown Floor' },
+      { code: 'DOC037', name: 'Orthopedics', description: 'Dr. Ashok Kumar Sirohi', floor: 'Ground Floor, Block-B' },
+      { code: 'DOC036', name: 'General Medicine', description: 'Dr. Swami Prasad Gupta', floor: '1st Floor, Block-A' }
+    ];
+
+    const insertDept = sqlite.prepare(`
+      INSERT OR IGNORE INTO departments (id, name, code, floor, description, default_queue_url, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'active', ?)
+    `);
+
+    for (const d of depts) {
+      const id = require('crypto').randomUUID ? require('crypto').randomUUID() : Math.random().toString(36).substring(2, 15);
+      insertDept.run(
+        id,
+        d.name,
+        d.code,
+        d.floor,
+        d.description,
+        \`https://hms.jjmhospitalkashipur.com/qd/\${d.code}\`,
+        new Date().toISOString()
+      );
+    }
+  } catch (e: any) {
+    console.error('Error seeding departments:', e.message);
+  }
 }
 
 // Automatically init schema on import
