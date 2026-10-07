@@ -599,9 +599,14 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
     final emergency = _config?.settings['emergencyAnnouncement'];
     final bool isEmergencyActive = _currentState == DisplayState.EMERGENCY && emergency != null;
 
+    final int rotationDegrees = _config?.settings['rotation'] ?? 0;
+    final int quarterTurns = rotationDegrees ~/ 90;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0B1329),
-      body: Stack(
+      body: RotatedBox(
+        quarterTurns: quarterTurns,
+        child: Stack(
           fit: StackFit.expand,
           children: [
             // LAYER 1: Doctor OPD Live Queue (WebView)
@@ -626,6 +631,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
               Container(color: Colors.black),
           ],
         ),
+      ),
     );
   }
 

@@ -46,6 +46,7 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
   const [location, setLocation] = useState(screen.location);
   const [staleThreshold, setStaleThreshold] = useState(screen.staleThresholdSeconds || 180);
   const [currentCampaignId, setCurrentCampaignId] = useState(screen.currentCampaignId || '');
+  const [rotation, setRotation] = useState(screen.rotation || 0);
 
   const [isUpdating, setIsUpdating] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -125,6 +126,7 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
         location,
         staleThresholdSeconds: Number(staleThreshold),
         currentCampaignId: currentCampaignId || null,
+        rotation: Number(rotation),
       });
       setFeedback('Screen settings successfully updated.');
       onRefreshList();
@@ -543,6 +545,20 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
                       {c.name}
                     </option>
                   ))}
+                </select>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Screen Rotation</label>
+                <select
+                  className="form-select"
+                  value={rotation}
+                  onChange={(e) => setRotation(Number(e.target.value))}
+                >
+                  <option value={0}>0° (Landscape Default)</option>
+                  <option value={90}>90° (Portrait / Vertical)</option>
+                  <option value={180}>180° (Upside Down)</option>
+                  <option value={270}>270° (Portrait Inverted)</option>
                 </select>
               </div>
 

@@ -31,14 +31,14 @@ export class ScreenRepository {
         id, name, code, department_id, device_id, location, queue_url,
         stale_threshold_seconds, target_config_version, applied_config_version, media_manifest_version,
         status, connection_status, health_status, current_content, current_campaign_id,
-        playlist_id, device_token, player_version, is_paused, power_state,
+        playlist_id, device_token, player_version, is_paused, power_state, rotation,
         latest_snapshot, latest_snapshot_time, last_heartbeat, last_heartbeat_at, last_sync_at,
         device_metadata, created_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?
       )
@@ -64,6 +64,7 @@ export class ScreenRepository {
       screen.playerVersion || '1.0.0',
       screen.isPaused ? 1 : 0,
       screen.powerState || 'on',
+      screen.rotation || 0,
       screen.latestSnapshot || null,
       screen.latestSnapshotTime || null,
       screen.lastHeartbeat || null,
@@ -104,6 +105,7 @@ export class ScreenRepository {
         player_version = ?,
         is_paused = ?,
         power_state = ?,
+        rotation = ?,
         latest_snapshot = ?,
         latest_snapshot_time = ?,
         last_heartbeat = ?,
@@ -132,6 +134,7 @@ export class ScreenRepository {
       updated.playerVersion,
       updated.isPaused ? 1 : 0,
       updated.powerState || 'on',
+      updated.rotation || 0,
       updated.latestSnapshot || null,
       updated.latestSnapshotTime || null,
       updated.lastHeartbeat || null,
@@ -230,6 +233,7 @@ export class ScreenRepository {
       playerVersion: r.player_version || '1.0.0',
       isPaused: r.is_paused === 1,
       powerState: (r.power_state || 'on') as 'on' | 'off',
+      rotation: r.rotation || 0,
       latestSnapshot: r.latest_snapshot || undefined,
       latestSnapshotTime: r.latest_snapshot_time || undefined,
       deviceMetadata: metadata,

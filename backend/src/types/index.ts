@@ -82,6 +82,7 @@ export interface Screen {
   playerVersion: string;
   isPaused?: boolean;
   powerState?: 'on' | 'off';
+  rotation?: number;
   latestSnapshot?: string;
   latestSnapshotTime?: string;
   deviceMetadata?: {
@@ -234,6 +235,7 @@ export interface ResolvedDisplayConfig {
     announcementTicker?: string;
     isPaused?: boolean;
     powerState?: 'on' | 'off';
+    rotation?: number;
     emergencyAnnouncement?: EmergencyAnnouncement | null;
   };
 }

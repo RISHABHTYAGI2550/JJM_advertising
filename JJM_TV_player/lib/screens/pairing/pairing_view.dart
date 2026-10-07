@@ -165,7 +165,7 @@ class _PairingViewState extends State<PairingView> {
 
           Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 30),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -190,9 +190,9 @@ class _PairingViewState extends State<PairingView> {
                             )
                           ],
                         ),
-                        child: Image.asset('assets/images/logo.png', width: 44, height: 44, fit: BoxFit.contain),
+                        child: const Icon(Icons.local_hospital_rounded, color: Colors.white, size: 32),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 12),
                       Flexible(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -201,7 +201,7 @@ class _PairingViewState extends State<PairingView> {
                               "JJM HOSPITAL KASHIPUR",
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 26,
+                                fontSize: 22,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: -0.5,
                               ),
@@ -211,7 +211,7 @@ class _PairingViewState extends State<PairingView> {
                               "DIGITAL SIGNAGE & QUEUE DISPLAY PLAYER",
                               style: TextStyle(
                                 color: _lightPurple,
-                                fontSize: 13,
+                                fontSize: 11,
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: 1.2,
                               ),
@@ -223,12 +223,12 @@ class _PairingViewState extends State<PairingView> {
                     ],
                   ),
 
-                  const SizedBox(height: 38),
+                  const SizedBox(height: 24),
 
                   // Pairing Code Card
                   Container(
-                    width: 580,
-                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 34),
+                    width: 520,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
                     decoration: BoxDecoration(
                       color: _cardBg,
                       borderRadius: BorderRadius.circular(24),
@@ -252,11 +252,11 @@ class _PairingViewState extends State<PairingView> {
                             letterSpacing: 2.0,
                           ),
                         ),
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 14),
 
                         // The 6-digit Code
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                           decoration: BoxDecoration(
                             color: const Color(0xFF0F0D1C),
                             borderRadius: BorderRadius.circular(16),
@@ -275,7 +275,7 @@ class _PairingViewState extends State<PairingView> {
                                   formattedCode,
                                   style: TextStyle(
                                     color: _isServerConnected ? _lightPurple : const Color(0xFF6B6582),
-                                    fontSize: 48,
+                                    fontSize: 40,
                                     fontWeight: FontWeight.w900,
                                     letterSpacing: 8.0,
                                     fontFamily: 'monospace',
@@ -312,9 +312,9 @@ class _PairingViewState extends State<PairingView> {
                           ],
                         ),
 
-                        const SizedBox(height: 28),
-                        Divider(color: _primaryPurple.withValues(alpha: 0.2)),
                         const SizedBox(height: 20),
+                        Divider(color: _primaryPurple.withValues(alpha: 0.2)),
+                        const SizedBox(height: 16),
 
                         // 3-step Instructions
                         Row(
@@ -331,7 +331,7 @@ class _PairingViewState extends State<PairingView> {
                     ),
                   ),
 
-                  const SizedBox(height: 26),
+                  const SizedBox(height: 16),
 
                   // Refresh Button (No server configuration inputs)
                   TextButton.icon(
@@ -351,17 +351,17 @@ class _PairingViewState extends State<PairingView> {
   Widget _buildStep(String num, String title, String subtitle) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: const Color(0xFF0F0D1C).withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: _primaryPurple.withValues(alpha: 0.15)),
         ),
         child: Column(
           children: [
             Container(
-              width: 26,
-              height: 26,
+              width: 24,
+              height: 24,
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [_primaryPurple, _accentPurple],
@@ -380,13 +380,13 @@ class _PairingViewState extends State<PairingView> {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
             ),
             const SizedBox(height: 2),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFF8C889E), fontSize: 10),
+              style: const TextStyle(color: Color(0xFF8C889E), fontSize: 9),
             ),
           ],
         ),

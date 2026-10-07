@@ -52,6 +52,7 @@ export class ResolverService {
           offlineMediaCached: true,
           isPaused: true,
           powerState: screen.powerState || 'on',
+          rotation: screen.rotation || 0,
           emergencyAnnouncement: activeEmergency,
         },
       };
@@ -104,6 +105,7 @@ export class ResolverService {
         offlineMediaCached: true,
         isPaused: !!screen.isPaused,
         powerState: screen.powerState || 'on',
+        rotation: screen.rotation || 0,
         emergencyAnnouncement: activeEmergency,
       },
     };
@@ -229,6 +231,7 @@ export class ResolverService {
         offlineMediaCached: true,
         isPaused: !!screen.isPaused,
         powerState: screen.powerState || 'on',
+        rotation: screen.rotation || 0,
         emergencyAnnouncement: emergency,
         announcementTicker: campaign.type === 'emergency' ? campaign.name : undefined,
       },

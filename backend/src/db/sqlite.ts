@@ -80,6 +80,7 @@ export function initDatabaseSchema() {
       player_version TEXT DEFAULT '1.0.0',
       is_paused INTEGER NOT NULL DEFAULT 0,
       power_state TEXT DEFAULT 'on',
+      rotation INTEGER NOT NULL DEFAULT 0,
       latest_snapshot TEXT,
       latest_snapshot_time TEXT,
       last_heartbeat TEXT,
@@ -217,6 +218,13 @@ export function initDatabaseSchema() {
   const mediaRow = sqlite.prepare("SELECT * FROM system_versions WHERE id = 'MEDIA_MANIFEST'").get();
   if (!mediaRow) {
     sqlite.prepare("INSERT INTO system_versions (id, version_number, updated_at) VALUES ('MEDIA_MANIFEST', 1, ?)").run(new Date().toISOString());
+  }
+
+  // Safe migration for rotation column
+  try {
+    sqlite.exec("ALTER TABLE screens ADD COLUMN rotation INTEGER NOT NULL DEFAULT 0;");
+  } catch (e: any) {
+    // Ignore error if column already exists
   }
 }
 
