@@ -22,7 +22,7 @@ export const PairScreenModal: React.FC<PairScreenModalProps> = ({
   const [screenName, setScreenName] = useState('');
   const [departmentId, setDepartmentId] = useState(departments[0]?.id || '');
   const [location, setLocation] = useState('');
-  const [queueUrl, setQueueUrl] = useState('');
+  const [queueUrl, setQueueUrl] = useState(departments[0]?.defaultQueueUrl || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -149,7 +149,14 @@ export const PairScreenModal: React.FC<PairScreenModalProps> = ({
               <select
                 className="form-select"
                 value={departmentId}
-                onChange={(e) => setDepartmentId(e.target.value)}
+                onChange={(e) => {
+                  const newDeptId = e.target.value;
+                  setDepartmentId(newDeptId);
+                  const dept = departments.find((d) => d.id === newDeptId);
+                  if (dept && dept.defaultQueueUrl) {
+                    setQueueUrl(dept.defaultQueueUrl);
+                  }
+                }}
                 required
               >
                 {departments.map((d) => (

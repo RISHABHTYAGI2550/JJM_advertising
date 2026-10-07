@@ -498,7 +498,14 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
                 <select
                   className="form-select"
                   value={departmentId}
-                  onChange={(e) => setDepartmentId(e.target.value)}
+                  onChange={(e) => {
+                    const newDeptId = e.target.value;
+                    setDepartmentId(newDeptId);
+                    const dept = departments.find((d) => d.id === newDeptId);
+                    if (dept && dept.defaultQueueUrl) {
+                      setQueueUrl(dept.defaultQueueUrl);
+                    }
+                  }}
                   required
                 >
                   {departments.map((d) => (
