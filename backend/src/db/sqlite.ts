@@ -276,7 +276,7 @@ export function initDatabaseSchema() {
         d.code,
         d.floor,
         d.description,
-        \`https://hms.jjmhospitalkashipur.com/qd/\${d.code}\`,
+        'https://hms.jjmhospitalkashipur.com/qd/' + d.code,
         new Date().toISOString()
       );
     }
