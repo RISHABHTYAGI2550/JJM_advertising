@@ -53,7 +53,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   const [selectedMediaId, setSelectedMediaId] = useState(media[0]?.id || '');
   const [selectedPlaylistId, setSelectedPlaylistId] = useState(playlists[0]?.id || '');
   const [targetScope, setTargetScope] = useState<'all' | 'department' | 'screen'>('all');
-  const [targetId, setTargetId] = useState('');
+  const [targetIds, setTargetIds] = useState<string[]>([]);
   const [priority, setPriority] = useState(70);
   const [duration, setDuration] = useState(15);
   const [intervalMinutes, setIntervalMinutes] = useState(5);
@@ -77,7 +77,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
     setSelectedMediaId(media[0]?.id || '');
     setSelectedPlaylistId(playlists[0]?.id || '');
     setTargetScope('all');
-    setTargetId('');
+    setTargetIds([]);
     setPriority(70);
     setDuration(15);
     setIntervalMinutes(5);
@@ -102,7 +102,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
       );
     }
     setTargetScope(c.type === 'global' ? 'all' : c.type === 'screen' ? 'screen' : 'department');
-    setTargetId(c.targetIds && c.targetIds[0] !== 'all' ? c.targetIds[0] : '');
+    setTargetIds(c.targetIds && c.targetIds[0] !== 'all' ? c.targetIds : []);
     setPriority(c.priority || 70);
     setDuration(c.displayDurationSeconds || 15);
     setIntervalMinutes(c.intervalMinutes || 5);
@@ -126,7 +126,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
       }
 
       const selectedMedia = media.find((m) => m.id === selectedMediaId) || media[0];
-      const targetIds = targetScope === 'all' ? ['all'] : targetId ? [targetId] : [];
+      const finalTargetIds = targetScope === 'all' ? ['all'] : targetIds;
       const isVideo = selectedMedia?.type === 'video';
 
       let resolvedContentType = 'single_image_only';
@@ -147,7 +147,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
           mediaId: isPlaylistMode ? null : (selectedMedia?.id || null),
           mediaUrl: isPlaylistMode ? null : (selectedMedia?.url || null),
           playlistId: isPlaylistMode ? selectedPlaylistId : null,
-          targetIds,
+          targetIds: finalTargetIds,
           priority: Number(priority),
           displayDurationSeconds: Number(duration),
           intervalMinutes: Number(intervalMinutes),
@@ -163,7 +163,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
           mediaId: isPlaylistMode ? undefined : selectedMedia?.id,
           mediaUrl: isPlaylistMode ? undefined : selectedMedia?.url,
           playlistId: isPlaylistMode ? selectedPlaylistId : undefined,
-          targetIds,
+          targetIds: finalTargetIds,
           priority: Number(priority),
           displayDurationSeconds: Number(duration),
           intervalMinutes: Number(intervalMinutes),
@@ -700,9 +700,9 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                         type="button"
                         onClick={() => {
                           setTargetScope(sc);
-                          if (sc === 'all') setTargetId('all');
-                          else if (sc === 'department') setTargetId(departments[0]?.id || '');
-                          else setTargetId(screens[0]?.id || '');
+                          if (sc === 'all') setTargetIds(['all']);
+                          else if (sc === 'department') setTargetIds([departments[0]?.id || '']);
+                          else setTargetIds([screens[0]?.id || '']);
                         }}
                         className={targetScope === sc ? 'btn btn-primary btn-sm' : 'btn btn-outline btn-sm'}
                       >
@@ -714,37 +714,43 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
 
                 {targetScope === 'department' && (
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Select Department</label>
-                    <select
-                      className="form-select"
-                      value={targetId}
-                      onChange={(e) => setTargetId(e.target.value)}
-                      required
-                    >
+                    <label className="form-label">Select Department(s)</label>
+                    <div style={{ maxHeight: '120px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '4px', padding: '8px' }}>
                       {departments.map((d) => (
-                        <option key={d.id} value={d.id}>
+                        <label key={d.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={targetIds.includes(d.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) setTargetIds([...targetIds, d.id]);
+                              else setTargetIds(targetIds.filter(id => id !== d.id));
+                            }}
+                          />
                           {d.name} ({d.code})
-                        </option>
+                        </label>
                       ))}
-                    </select>
+                    </div>
                   </div>
                 )}
 
                 {targetScope === 'screen' && (
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Select Screen</label>
-                    <select
-                      className="form-select"
-                      value={targetId}
-                      onChange={(e) => setTargetId(e.target.value)}
-                      required
-                    >
+                    <label className="form-label">Select Screen(s)</label>
+                    <div style={{ maxHeight: '120px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '4px', padding: '8px' }}>
                       {screens.map((s) => (
-                        <option key={s.id} value={s.id}>
+                        <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={targetIds.includes(s.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) setTargetIds([...targetIds, s.id]);
+                              else setTargetIds(targetIds.filter(id => id !== s.id));
+                            }}
+                          />
                           {s.name} ({s.location})
-                        </option>
+                        </label>
                       ))}
-                    </select>
+                    </div>
                   </div>
                 )}
 

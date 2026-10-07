@@ -55,6 +55,13 @@ router.post('/', upload.single('file'), (req: Request, res: Response) => {
   let size = 0;
   let sha256Hash = 'unhashed';
 
+  if (customUrl && !file) {
+    const ext = customUrl.split('?')[0].split('.').pop()?.toLowerCase() || '';
+    if (['mp4', 'webm', 'mov'].includes(ext)) {
+      mediaType = 'video';
+    }
+  }
+
   if (file) {
     mediaUrl = `/uploads/media/${file.filename}`;
     const ext = path.extname(file.originalname).toLowerCase();

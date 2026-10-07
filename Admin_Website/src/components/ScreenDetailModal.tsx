@@ -16,13 +16,14 @@ import {
   Send,
   Zap,
 } from 'lucide-react';
-import { Screen, Department, DeviceCommand, CommandType } from '../types';
+import { Screen, Department, DeviceCommand, CommandType, Campaign } from '../types';
 import { api } from '../services/api';
 import { getSocket } from '../services/socket';
 
 interface ScreenDetailModalProps {
   screen: Screen | null;
   departments: Department[];
+  campaigns: Campaign[];
   isOpen: boolean;
   onClose: () => void;
   onRefreshList: () => void;
@@ -31,6 +32,7 @@ interface ScreenDetailModalProps {
 export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
   screen,
   departments,
+  campaigns,
   isOpen,
   onClose,
   onRefreshList,
@@ -43,6 +45,7 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
   const [departmentId, setDepartmentId] = useState(screen.departmentId);
   const [location, setLocation] = useState(screen.location);
   const [staleThreshold, setStaleThreshold] = useState(screen.staleThresholdSeconds || 180);
+  const [currentCampaignId, setCurrentCampaignId] = useState(screen.currentCampaignId || '');
 
   const [isUpdating, setIsUpdating] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -121,6 +124,7 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
         departmentId,
         location,
         staleThresholdSeconds: Number(staleThreshold),
+        currentCampaignId: currentCampaignId || null,
       });
       setFeedback('Screen settings successfully updated.');
       onRefreshList();
@@ -524,6 +528,22 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
                   min={30}
                   max={1200}
                 />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Active Campaign</label>
+                <select
+                  className="form-select"
+                  value={currentCampaignId}
+                  onChange={(e) => setCurrentCampaignId(e.target.value)}
+                >
+                  <option value="">None (Queue Only)</option>
+                  {campaigns.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <button type="submit" className="btn btn-primary" disabled={isUpdating}>

@@ -345,6 +345,7 @@ export const App: React.FC = () => {
       <ScreenDetailModal
         screen={selectedScreen}
         departments={departments}
+        campaigns={campaigns}
         isOpen={!!selectedScreen}
         onClose={() => setSelectedScreen(null)}
         onRefreshList={fetchData}
