@@ -537,7 +537,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
     } else {
       _transitionTo(DisplayState.AD_PLAYBACK);
       if (currentItem.type == 'video' && currentItem.mediaUrl != null) {
-        _playVideo(currentItem.mediaUrl!);
+        _playVideo(currentItem.mediaUrl!, currentItem.muted);
       }
     }
 
@@ -561,7 +561,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
     _startDisplayLoop();
   }
 
-  void _playVideo(String rawUrl) {
+  void _playVideo(String rawUrl, bool muted) {
     _videoController?.dispose();
     _videoController = null;
     final url = _resolveMediaUrl(rawUrl);
@@ -577,6 +577,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
       controller.initialize().then((_) {
         if (mounted && _videoController == controller && _currentState == DisplayState.AD_PLAYBACK) {
           controller.setLooping(true); // Loop video so screen doesn't go black
+          controller.setVolume(muted ? 0.0 : 1.0);
           setState(() {});
           controller.play();
         } else {

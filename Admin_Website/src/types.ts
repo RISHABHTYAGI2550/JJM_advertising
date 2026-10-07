@@ -145,6 +145,7 @@ export interface Campaign {
   priority: number;
   intervalMinutes?: number;
   displayDurationSeconds?: number;
+  videoMuted?: boolean;
   startDate?: string;
   endDate?: string;
   startTime?: string;

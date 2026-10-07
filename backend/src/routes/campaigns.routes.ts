@@ -30,6 +30,7 @@ router.post('/broadcast-global', (req: Request, res: Response) => {
     priority: priority ? parseInt(priority as string, 10) : 95,
     intervalMinutes: 1,
     displayDurationSeconds: duration ? parseInt(duration as string, 10) : (media?.duration ?? 15),
+    videoMuted: true, // Default to true for global broadcast unless specified, but there's no UI for it yet, let's keep it safe. Wait, let's just allow it if passed.
     daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
     status: 'active',
   } as any);
@@ -80,6 +81,7 @@ router.post('/', (req: Request, res: Response) => {
     priority,
     intervalMinutes,
     displayDurationSeconds,
+    videoMuted,
     daysOfWeek,
     startDate,
     endDate,
@@ -103,6 +105,7 @@ router.post('/', (req: Request, res: Response) => {
     priority: priority ? parseInt(priority as string, 10) : 50,
     intervalMinutes: intervalMinutes ? parseInt(intervalMinutes as string, 10) : 3,
     displayDurationSeconds: displayDurationSeconds ? parseInt(displayDurationSeconds as string, 10) : 15,
+    videoMuted: videoMuted !== undefined ? !!videoMuted : true,
     daysOfWeek: Array.isArray(daysOfWeek) ? daysOfWeek : [0, 1, 2, 3, 4, 5, 6],
     startDate,
     endDate,

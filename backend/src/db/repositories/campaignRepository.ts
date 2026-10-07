@@ -92,11 +92,11 @@ export class CampaignRepository {
       sqlite.prepare(`
         INSERT INTO campaigns (
           id, name, description, type, content_type, media_id, media_url, playlist_id,
-          priority, interval_minutes, display_duration_seconds, days_of_week,
+          priority, interval_minutes, display_duration_seconds, video_muted, days_of_week,
           start_date, end_date, start_time, end_time, status, created_at
         ) VALUES (
           ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?, ?
         )
       `).run(
@@ -111,6 +111,7 @@ export class CampaignRepository {
         campaign.priority || 50,
         campaign.intervalMinutes || 3,
         campaign.displayDurationSeconds || 15,
+        campaign.videoMuted !== false ? 1 : 0,
         JSON.stringify(campaign.daysOfWeek || [0, 1, 2, 3, 4, 5, 6]),
         campaign.startDate || null,
         campaign.endDate || null,
@@ -146,7 +147,7 @@ export class CampaignRepository {
         UPDATE campaigns SET
           name = ?, description = ?, type = ?, content_type = ?,
           media_id = ?, media_url = ?, playlist_id = ?, priority = ?,
-          interval_minutes = ?, display_duration_seconds = ?, days_of_week = ?,
+          interval_minutes = ?, display_duration_seconds = ?, video_muted = ?, days_of_week = ?,
           start_date = ?, end_date = ?, start_time = ?, end_time = ?, status = ?
         WHERE id = ?
       `).run(
@@ -160,6 +161,7 @@ export class CampaignRepository {
         updated.priority,
         updated.intervalMinutes,
         updated.displayDurationSeconds,
+        updated.videoMuted !== false ? 1 : 0,
         JSON.stringify(updated.daysOfWeek),
         updated.startDate || null,
         updated.endDate || null,
@@ -212,6 +214,7 @@ export class CampaignRepository {
       priority: r.priority,
       intervalMinutes: r.interval_minutes ?? 3,
       displayDurationSeconds: r.display_duration_seconds ?? 15,
+      videoMuted: r.video_muted !== 0,
       daysOfWeek,
       startDate: r.start_date || undefined,
       endDate: r.end_date || undefined,

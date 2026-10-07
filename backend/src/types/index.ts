@@ -127,6 +127,7 @@ export interface PlaylistItem {
   title: string;
   duration: number; // in seconds
   order: number;
+  muted?: boolean;
 }
 
 export interface Playlist {
@@ -151,6 +152,7 @@ export interface Campaign {
   priority: number;
   intervalMinutes: number;
   displayDurationSeconds: number;
+  videoMuted?: boolean;
   startDate?: string;
   endDate?: string;
   startTime?: string;

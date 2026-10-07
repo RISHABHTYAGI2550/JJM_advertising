@@ -140,6 +140,7 @@ export function initDatabaseSchema() {
       priority INTEGER NOT NULL DEFAULT 50,
       interval_minutes INTEGER NOT NULL DEFAULT 3,
       display_duration_seconds INTEGER NOT NULL DEFAULT 15,
+      video_muted INTEGER NOT NULL DEFAULT 1,
       days_of_week TEXT NOT NULL, -- JSON array of ints [0,1,2,3,4,5,6]
       start_date TEXT,
       end_date TEXT,
@@ -230,6 +231,10 @@ export function initDatabaseSchema() {
   try {
     sqlite.exec("ALTER TABLE emergency_events ADD COLUMN play_beep INTEGER NOT NULL DEFAULT 1;");
     sqlite.exec("ALTER TABLE emergency_events ADD COLUMN use_tts INTEGER NOT NULL DEFAULT 1;");
+  } catch (e: any) {}
+
+  try {
+    sqlite.exec("ALTER TABLE campaigns ADD COLUMN video_muted INTEGER NOT NULL DEFAULT 1;");
   } catch (e: any) {}
 }
 

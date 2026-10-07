@@ -57,6 +57,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   const [priority, setPriority] = useState(70);
   const [duration, setDuration] = useState(15);
   const [intervalMinutes, setIntervalMinutes] = useState(5);
+  const [videoMuted, setVideoMuted] = useState(true);
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -81,6 +82,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
     setPriority(70);
     setDuration(15);
     setIntervalMinutes(5);
+    setVideoMuted(true);
     setDaysOfWeek([0, 1, 2, 3, 4, 5, 6]);
     setShowCreateModal(true);
   };
@@ -106,6 +108,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
     setPriority(c.priority || 70);
     setDuration(c.displayDurationSeconds || 15);
     setIntervalMinutes(c.intervalMinutes || 5);
+    setVideoMuted(c.videoMuted !== false);
     setDaysOfWeek(c.daysOfWeek?.length ? c.daysOfWeek : [0, 1, 2, 3, 4, 5, 6]);
   };
 
@@ -151,6 +154,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
           priority: Number(priority),
           displayDurationSeconds: Number(duration),
           intervalMinutes: Number(intervalMinutes),
+          videoMuted,
           daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
         });
         setEditingCampaign(null);
@@ -167,6 +171,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
           priority: Number(priority),
           displayDurationSeconds: Number(duration),
           intervalMinutes: Number(intervalMinutes),
+          videoMuted,
           daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
           status: 'active',
         });
@@ -650,6 +655,30 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                             </button>
                           </div>
                         </div>
+
+                        {/* Video Audio Settings */}
+                        {(() => {
+                          const activeMedia = media.find((m) => m.id === selectedMediaId) || media[0];
+                          if (activeMedia?.type === 'video') {
+                            return (
+                              <div style={{ marginTop: '16px' }}>
+                                <label className="form-label" style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                  Video Audio
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={!videoMuted}
+                                    onChange={(e) => setVideoMuted(!e.target.checked)}
+                                    style={{ accentColor: 'var(--primary)', width: '16px', height: '16px' }}
+                                  />
+                                  <span>Play video with Voice / Audio (Unmuted)</span>
+                                </label>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                       </>
                     )
                   ) : (

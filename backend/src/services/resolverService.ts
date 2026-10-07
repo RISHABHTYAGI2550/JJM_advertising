@@ -178,6 +178,7 @@ export class ResolverService {
             title: campaign.name,
             duration: adDuration,
             order: 1,
+            muted: campaign.videoMuted,
           },
         ];
       } else {
@@ -192,6 +193,7 @@ export class ResolverService {
             title: campaign.name,
             duration: adDuration,
             order: 1,
+            muted: campaign.videoMuted,
           },
           {
             id: `camp-q-${campaign.id}`,

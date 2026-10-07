@@ -6,6 +6,7 @@ class PlaylistItem {
   final String title;
   final int duration; // seconds
   final int order;
+  final bool muted;
   final String? sha256Hash;
 
   PlaylistItem({
@@ -16,6 +17,7 @@ class PlaylistItem {
     required this.title,
     required this.duration,
     required this.order,
+    this.muted = true, // Default to true if not specified
     this.sha256Hash,
   });
 
@@ -28,6 +30,7 @@ class PlaylistItem {
       title: json['title'] ?? '',
       duration: json['duration'] is int ? json['duration'] : int.tryParse(json['duration']?.toString() ?? '15') ?? 15,
       order: json['order'] is int ? json['order'] : int.tryParse(json['order']?.toString() ?? '1') ?? 1,
+      muted: json['muted'] == true,
       sha256Hash: json['sha256Hash'],
     );
   }
@@ -41,6 +44,7 @@ class PlaylistItem {
       'title': title,
       'duration': duration,
       'order': order,
+      'muted': muted,
       'sha256Hash': sha256Hash,
     };
   }
