@@ -58,7 +58,49 @@ export class ResolverService {
       };
     }
 
-    // Resolve eligible targeted campaigns
+    // Manual screen-level campaign override
+    if (screen.currentCampaignId) {
+      if (screen.currentCampaignId === 'NONE') {
+        // Force Queue Only
+        return {
+          screenId: screen.id,
+          screenName: screen.name,
+          departmentId: screen.departmentId,
+          departmentName,
+          queueUrl,
+          staleThresholdSeconds,
+          configVersion,
+          mediaManifestVersion,
+          activeCampaign: null,
+          playlist: [{ id: 'override-queue', type: 'queue', title: 'Doctor Live Token Queue', duration: 30, order: 1 }],
+          settings: {
+            transition: 'fade',
+            heartbeatSeconds: 20,
+            offlineMediaCached: true,
+            isPaused: !!screen.isPaused,
+            powerState: screen.powerState || 'on',
+            rotation: screen.rotation || 0,
+            emergencyAnnouncement: activeEmergency,
+          },
+        };
+      } else {
+        const overrideCampaign = campaignRepo.getById(screen.currentCampaignId);
+        if (overrideCampaign && overrideCampaign.status === 'active') {
+          return this.buildConfigFromCampaign(
+            screen,
+            departmentName,
+            queueUrl,
+            staleThresholdSeconds,
+            configVersion,
+            mediaManifestVersion,
+            overrideCampaign,
+            activeEmergency
+          );
+        }
+      }
+    }
+
+    // Resolve eligible targeted campaigns if no active override
     const eligibleCampaigns = campaignRepo.getActiveForScreen(screen.id, screen.departmentId);
 
     if (eligibleCampaigns.length > 0) {

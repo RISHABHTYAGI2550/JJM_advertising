@@ -533,13 +533,14 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
               </div>
 
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Active Campaign</label>
+                <label className="form-label">Active Campaign (Override)</label>
                 <select
                   className="form-select"
                   value={currentCampaignId}
                   onChange={(e) => setCurrentCampaignId(e.target.value)}
                 >
-                  <option value="">None (Queue Only)</option>
+                  <option value="">Auto (Follow Target Priorities)</option>
+                  <option value="NONE">Force Queue Only (No Ads)</option>
                   {campaigns.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}

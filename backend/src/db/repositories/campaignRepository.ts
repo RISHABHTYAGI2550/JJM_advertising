@@ -3,7 +3,7 @@ import { Campaign, CampaignTarget } from '../../types';
 
 export class CampaignRepository {
   public getAll(): Campaign[] {
-    const rows = sqlite.prepare('SELECT * FROM campaigns ORDER BY priority DESC, created_at DESC').all() as any[];
+    const rows = sqlite.prepare("SELECT * FROM campaigns WHERE id != 'NONE' ORDER BY priority DESC, created_at DESC").all() as any[];
     return rows.map(r => this.mapRow(r));
   }
 

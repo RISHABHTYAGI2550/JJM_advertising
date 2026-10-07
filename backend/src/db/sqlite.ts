@@ -236,6 +236,17 @@ export function initDatabaseSchema() {
   try {
     sqlite.exec("ALTER TABLE campaigns ADD COLUMN video_muted INTEGER NOT NULL DEFAULT 1;");
   } catch (e: any) {}
+
+  // Ensure NONE campaign exists for overrides
+  try {
+    sqlite.prepare(`
+      INSERT OR IGNORE INTO campaigns (
+        id, name, type, content_type, priority, interval_minutes, display_duration_seconds, days_of_week, status, created_at
+      ) VALUES (
+        'NONE', 'Queue Only (Override)', 'global', 'only_queue', 0, 0, 0, '[]', 'active', ?
+      )
+    `).run(new Date().toISOString());
+  } catch (e: any) {}
 }
 
 // Automatically init schema on import
