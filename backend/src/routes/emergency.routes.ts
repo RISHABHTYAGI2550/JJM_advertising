@@ -47,7 +47,7 @@ router.get('/history', (req: Request, res: Response) => {
 
 // POST Broadcast emergency announcement with targeted scope
 router.post('/broadcast', (req: Request, res: Response) => {
-  const { title, message, severity, displayMode, targetType, targetIds, highlightScreen, durationSeconds } = req.body;
+  const { title, message, severity, displayMode, targetType, targetIds, highlightScreen, playBeep, useTts, durationSeconds } = req.body;
 
   if (!title || !message) {
     return res.status(400).json({ success: false, message: 'Title and message are required' });
@@ -70,6 +70,8 @@ router.post('/broadcast', (req: Request, res: Response) => {
     targetType: targetType || 'ALL',
     targetIds: Array.isArray(targetIds) && targetIds.length > 0 ? targetIds : ['all'],
     highlightScreen: highlightScreen !== undefined ? !!highlightScreen : true,
+    playBeep: playBeep !== undefined ? !!playBeep : true,
+    useTts: useTts !== undefined ? !!useTts : true,
     durationSeconds: parsedDuration,
   });
 

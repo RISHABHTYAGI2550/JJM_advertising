@@ -45,6 +45,8 @@ export class EmergencyRepository {
     targetType?: 'ALL' | 'DEPARTMENT' | 'SCREEN';
     targetIds?: string[];
     highlightScreen?: boolean;
+    playBeep?: boolean;
+    useTts?: boolean;
     durationSeconds?: number;
   }): EmergencyAnnouncement {
     const now = new Date().toISOString();
@@ -55,8 +57,8 @@ export class EmergencyRepository {
     sqlite.prepare(`
       INSERT INTO emergency_events (
         id, title, message, severity, display_mode, target_type, target_ids,
-        highlight_screen, is_active, duration_seconds, expires_at, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+        highlight_screen, play_beep, use_tts, is_active, duration_seconds, expires_at, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
     `).run(
       emergency.id,
       emergency.title,
@@ -66,6 +68,8 @@ export class EmergencyRepository {
       emergency.targetType || 'ALL',
       JSON.stringify(emergency.targetIds || ['all']),
       emergency.highlightScreen !== false ? 1 : 0,
+      emergency.playBeep !== false ? 1 : 0,
+      emergency.useTts !== false ? 1 : 0,
       emergency.durationSeconds || null,
       expiresAt,
       now
@@ -101,6 +105,8 @@ export class EmergencyRepository {
       targetType: (r.target_type || 'ALL') as 'ALL' | 'DEPARTMENT' | 'SCREEN',
       targetIds,
       highlightScreen: r.highlight_screen === 1,
+      playBeep: r.play_beep === 1,
+      useTts: r.use_tts === 1,
       active: r.is_active === 1,
       isActive: r.is_active === 1,
       status: r.is_active === 1 ? 'active' : 'cleared',

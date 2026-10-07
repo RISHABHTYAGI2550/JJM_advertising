@@ -9,6 +9,8 @@ import 'package:flutter/rendering.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 import '../../core/network/api_service.dart';
 import '../../core/storage/storage_service.dart';
@@ -60,6 +62,8 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
   WebViewController? _webViewController;
   VideoPlayerController? _videoController;
   late QueueMonitor _queueMonitor;
+  final FlutterTts _flutterTts = FlutterTts();
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
   // Timers
   Timer? _itemTimer;
@@ -110,6 +114,8 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
     _videoController?.dispose();
     _pulseController.dispose();
     _queueMonitor.dispose();
+    _flutterTts.stop();
+    _audioPlayer.dispose();
     SocketService.disconnect();
     super.dispose();
   }
@@ -464,7 +470,24 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
     _emergencyAutoDismissTimer = null;
 
     if (announcement != null && announcement['active'] != false) {
+      final bool isNew = _currentState != DisplayState.EMERGENCY;
       _transitionTo(DisplayState.EMERGENCY);
+      
+      if (isNew) {
+        if (announcement['playBeep'] == true) {
+          SystemSound.play(SystemSoundType.alert);
+          // Play a louder beep via audio player if possible, using a public short beep url
+          _audioPlayer.play(UrlSource('https://www.soundjay.com/buttons/sounds/beep-01a.mp3'));
+        }
+        if (announcement['useTts'] == true) {
+          final String msg = announcement['message'] ?? '';
+          _flutterTts.setVolume(1.0);
+          _flutterTts.setSpeechRate(0.5);
+          _flutterTts.setPitch(1.0);
+          _flutterTts.speak("Attention please. $msg");
+        }
+      }
+
       final duration = announcement['durationSeconds'] ?? announcement['duration'];
       if (duration != null) {
         final sec = int.tryParse(duration.toString()) ?? 0;
@@ -480,6 +503,7 @@ class _DisplayEngineState extends State<DisplayEngine> with SingleTickerProvider
   }
 
   void _clearEmergency() {
+    _flutterTts.stop();
     if (_currentState == DisplayState.EMERGENCY) {
       _transitionTo(DisplayState.QUEUE);
       _startDisplayLoop();

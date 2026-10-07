@@ -192,6 +192,8 @@ export interface EmergencyAnnouncement {
   targetType: 'ALL' | 'DEPARTMENT' | 'SCREEN';
   targetIds: string[];
   highlightScreen: boolean;
+  playBeep?: boolean;
+  useTts?: boolean;
   active: boolean;
   isActive?: boolean;
   status?: string;

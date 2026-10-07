@@ -185,6 +185,8 @@ export function initDatabaseSchema() {
       target_ids TEXT NOT NULL, -- JSON array
       highlight_screen INTEGER NOT NULL DEFAULT 1,
       is_active INTEGER NOT NULL DEFAULT 1,
+      play_beep INTEGER NOT NULL DEFAULT 1,
+      use_tts INTEGER NOT NULL DEFAULT 1,
       duration_seconds INTEGER,
       expires_at INTEGER,
       created_at TEXT NOT NULL,
@@ -223,9 +225,12 @@ export function initDatabaseSchema() {
   // Safe migration for rotation column
   try {
     sqlite.exec("ALTER TABLE screens ADD COLUMN rotation INTEGER NOT NULL DEFAULT 0;");
-  } catch (e: any) {
-    // Ignore error if column already exists
-  }
+  } catch (e: any) {}
+
+  try {
+    sqlite.exec("ALTER TABLE emergency_events ADD COLUMN play_beep INTEGER NOT NULL DEFAULT 1;");
+    sqlite.exec("ALTER TABLE emergency_events ADD COLUMN use_tts INTEGER NOT NULL DEFAULT 1;");
+  } catch (e: any) {}
 }
 
 // Automatically init schema on import

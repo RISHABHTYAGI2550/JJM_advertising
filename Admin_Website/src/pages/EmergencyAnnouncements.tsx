@@ -31,6 +31,8 @@ export const EmergencyAnnouncements: React.FC<EmergencyAnnouncementsProps> = ({
   const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
   const [priority, setPriority] = useState<'critical' | 'high' | 'normal'>('critical');
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [playBeep, setPlayBeep] = useState<boolean>(true);
+  const [useTts, setUseTts] = useState<boolean>(true);
 
   const [heading, setHeading] = useState('CODE RED: MEDICAL EMERGENCY / आपातकालीन सूचना');
   const [message, setMessage] = useState(
@@ -102,6 +104,8 @@ export const EmergencyAnnouncements: React.FC<EmergencyAnnouncementsProps> = ({
         severity: alertType,
         displayMode: 'takeover',
         highlightScreen: true,
+        playBeep,
+        useTts,
         durationSeconds: duration > 0 ? duration : null,
         targetType,
         targetIds: targetType === 'ALL' ? ['all'] : selectedTargetIds,
@@ -428,6 +432,31 @@ export const EmergencyAnnouncements: React.FC<EmergencyAnnouncementsProps> = ({
                     {lang.label}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Audio Settings */}
+            <div>
+              <label className="form-label">Audio & Voice Options</label>
+              <div style={{ display: 'flex', gap: '20px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                  <input
+                    type="checkbox"
+                    checked={playBeep}
+                    onChange={(e) => setPlayBeep(e.target.checked)}
+                    style={{ accentColor: 'var(--primary)', width: '16px', height: '16px' }}
+                  />
+                  <span>Play 1-Time Alert Beep Sound</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                  <input
+                    type="checkbox"
+                    checked={useTts}
+                    onChange={(e) => setUseTts(e.target.checked)}
+                    style={{ accentColor: 'var(--primary)', width: '16px', height: '16px' }}
+                  />
+                  <span>Auto-Speak Message (Voice Note / TTS)</span>
+                </label>
               </div>
             </div>
 
