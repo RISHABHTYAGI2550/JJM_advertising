@@ -215,7 +215,7 @@ export const EmergencyAnnouncements: React.FC<EmergencyAnnouncementsProps> = ({
       </div>
 
       {/* Main 2-Column Interface: Left Config, Right Live TV Preview */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(340px, 1.1fr) minmax(320px, 1fr)', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
         {/* Left: Emergency Configuration Form */}
         <div className="card">
           <div className="card-header">
@@ -234,7 +234,7 @@ export const EmergencyAnnouncements: React.FC<EmergencyAnnouncementsProps> = ({
             {/* 1. Alert Type */}
             <div>
               <label className="form-label">Alert Severity Level</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '8px' }}>
                 {(['critical', 'warning', 'info'] as const).map((type) => {
                   const isSel = alertType === type;
                   return (
@@ -278,7 +278,7 @@ export const EmergencyAnnouncements: React.FC<EmergencyAnnouncementsProps> = ({
             {/* 2. Target Displays */}
             <div>
               <label className="form-label">Target Scope</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '8px' }}>
                 {(['ALL', 'DEPARTMENT', 'SCREEN'] as const).map((t) => (
                   <button
                     key={t}
@@ -392,7 +392,7 @@ export const EmergencyAnnouncements: React.FC<EmergencyAnnouncementsProps> = ({
             {/* 3. Duration */}
             <div>
               <label className="form-label">Display Duration</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '6px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(60px, 1fr))', gap: '6px' }}>
                 {[
                   { label: '10 sec', sec: 10 },
                   { label: '30 sec', sec: 30 },
@@ -416,7 +416,7 @@ export const EmergencyAnnouncements: React.FC<EmergencyAnnouncementsProps> = ({
             {/* 4. Language Selection */}
             <div>
               <label className="form-label">Language Mode</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '8px' }}>
                 {[
                   { id: 'both', label: 'English + Hindi' },
                   { id: 'en', label: 'English Only' },

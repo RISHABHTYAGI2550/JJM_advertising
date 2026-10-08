@@ -169,7 +169,7 @@ export const OneClickGlobalModal: React.FC<OneClickGlobalModalProps> = ({
             {/* Duration Selector */}
             <div>
               <label className="form-label">Broadcast Duration</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(70px, 1fr))', gap: '8px' }}>
                 {[15, 30, 60, 120].map((sec) => (
                   <button
                     key={sec}

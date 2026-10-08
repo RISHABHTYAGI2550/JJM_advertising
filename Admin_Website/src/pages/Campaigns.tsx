@@ -406,7 +406,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                       backgroundColor: 'var(--bg-main)',
                       borderRadius: 'var(--radius-sm)',
                       display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
                       gap: '8px',
                       fontSize: '11px',
                     }}
@@ -516,7 +516,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                 {/* Content Source Selection: Media vs Playlist */}
                 <div>
                   <label className="form-label">Campaign Content Source</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px', marginBottom: '10px' }}>
                     <button
                       type="button"
                       onClick={() => setContentTypeMode('media')}
@@ -634,7 +634,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                           <label className="form-label" style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                             Display Playback Mode
                           </label>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' }}>
                             <button
                               type="button"
                               onClick={() => setSingleMediaMode('fullscreen')}
@@ -722,7 +722,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
 
                 <div>
                   <label className="form-label">Target Scope</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '8px' }}>
                     {(['all', 'department', 'screen'] as const).map((sc) => (
                       <button
                         key={sc}
@@ -783,7 +783,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                   </div>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
                   <div>
                     <label className="form-label">Display Duration (seconds)</label>
                     <input

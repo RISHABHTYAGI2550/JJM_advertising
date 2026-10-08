@@ -65,7 +65,7 @@ export const SettingsPage: React.FC = () => {
       </div>
 
       {/* Main Settings Layout (Sidebar + Content Box) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: '20px', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', alignItems: 'start' }}>
         {/* Left Navigation */}
         <div className="card" style={{ padding: '10px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>

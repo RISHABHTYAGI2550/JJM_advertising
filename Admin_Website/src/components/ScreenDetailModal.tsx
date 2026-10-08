@@ -190,6 +190,7 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
             padding: '0 24px',
             backgroundColor: '#FAF8FC',
             gap: '8px',
+            flexWrap: 'wrap',
           }}
         >
           {[
@@ -285,7 +286,7 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
               {/* Mode Controls */}
               <div>
                 <label className="form-label">Immediate Playback Override</label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
                   <button
                     className="btn btn-secondary btn-sm"
                     onClick={() => dispatchCommand('RELOAD_QUEUE', { force: true })}
@@ -389,7 +390,7 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
                   </div>
 
                   {/* 5-Stage Visual Stepper */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', textAlign: 'center' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center' }}>
                     {['CREATED', 'SENT', 'RECEIVED', 'APPLIED', 'ACKNOWLEDGED'].map((stage, i) => {
                       const stages = ['CREATED', 'SENT', 'RECEIVED', 'APPLIED', 'ACKNOWLEDGED'];
                       const currentIdx = stages.indexOf(activeCommand.status);
@@ -399,12 +400,14 @@ export const ScreenDetailModal: React.FC<ScreenDetailModalProps> = ({
                         <div
                           key={stage}
                           style={{
+                            flex: '1 1 60px',
                             padding: '6px 2px',
                             borderRadius: '4px',
                             backgroundColor: isPastOrCurrent ? 'var(--primary)' : '#EDE8F2',
                             color: isPastOrCurrent ? '#FFFFFF' : 'var(--text-muted)',
                             fontSize: '10px',
                             fontWeight: 700,
+                            textAlign: 'center',
                           }}
                         >
                           {stage}

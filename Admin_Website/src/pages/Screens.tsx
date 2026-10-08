@@ -495,7 +495,7 @@ export const ScreensPage: React.FC<ScreensPageProps> = ({
                       backgroundColor: 'var(--bg-main)',
                       borderRadius: 'var(--radius-sm)',
                       display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
                       gap: '8px',
                       fontSize: '11px',
                     }}

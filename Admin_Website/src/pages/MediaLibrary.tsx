@@ -410,7 +410,7 @@ export const MediaLibraryPage: React.FC<MediaLibraryPageProps> = ({
                 </div>
 
                 {/* Category & Duration */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
                   <div>
                     <label className="form-label">Category</label>
                     <select

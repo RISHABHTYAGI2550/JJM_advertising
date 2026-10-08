@@ -398,7 +398,7 @@ export const PlaylistsPage: React.FC<PlaylistsPageProps> = ({
 
                 {/* Sequence Builder Blocks */}
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
                     <label className="form-label" style={{ marginBottom: 0 }}>Sequence Steps ({items.length})</label>
                     <div style={{ display: 'flex', gap: '6px' }}>
                       <button

@@ -267,7 +267,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             {/* Target Selection */}
             <div>
               <label className="form-label">Broadcast Target</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '8px' }}>
                 <button
                   type="button"
                   onClick={() => setBroadcastTarget('all')}
@@ -406,7 +406,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
 
             {/* Media Selector & Duration */}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '12px' }}>
               <div>
                 <label className="form-label">Select Media Asset</label>
                 <select
@@ -651,7 +651,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         backgroundColor: 'var(--bg-main)',
                         borderRadius: 'var(--radius-sm)',
                         display: 'grid',
-                        gridTemplateColumns: '1fr 1fr',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
                         gap: '8px',
                         fontSize: '11px',
                       }}
