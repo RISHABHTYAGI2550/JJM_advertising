@@ -352,6 +352,7 @@ export const App: React.FC = () => {
       />
 
       <ScreenDetailModal
+        key={selectedScreen?.id || 'empty-screen'}
         screen={selectedScreen}
         departments={departments}
         campaigns={campaigns}

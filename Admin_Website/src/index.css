@@ -477,6 +477,8 @@ p, .body-text {
 .modal-body {
   padding: 24px;
   overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .modal-footer {
@@ -490,7 +492,7 @@ p, .body-text {
 }
 
 /* Fix for when a form wraps modal-body and modal-footer */
-.modal-content form {
+.modal-content > form {
   display: flex;
   flex-direction: column;
   flex: 1;
