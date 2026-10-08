@@ -489,6 +489,15 @@ p, .body-text {
   background-color: #FAF8FC;
 }
 
+/* Fix for when a form wraps modal-body and modal-footer */
+.modal-content form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* Realistic TV Preview Container */
 .tv-preview-frame {
   background: #0F0E17;
